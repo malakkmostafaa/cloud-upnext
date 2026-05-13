@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { mockUsers } from "../data/mockData";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState("ali@upnext.com");
   const [password, setPassword] = useState("Password123!");
@@ -10,15 +13,28 @@ export default function Login() {
 
   const handleLogin = (e) => {
     e.preventDefault();
+    setError("");
 
-    if (!email || !password) {
-      setError("Please enter email and password.");
+    const foundUser = mockUsers.find(
+      (user) =>
+        user.email.toLowerCase() === email.toLowerCase() &&
+        user.password === password
+    );
+
+    if (!foundUser) {
+      setError("Invalid email or password.");
       return;
     }
 
-    // Temporary mock token until Cognito is connected
-    localStorage.setItem("upnext_token", "mock-token");
-    navigate("/dashboard");
+    const { password: _, ...safeUser } = foundUser;
+
+    login(safeUser);
+
+    if (safeUser.role === "EMPLOYEE") {
+      navigate("/board");
+    } else {
+      navigate("/dashboard");
+    }
   };
 
   return (
@@ -72,10 +88,12 @@ export default function Login() {
         </form>
 
         <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">Demo users later:</p>
-          <p>Ali: Manager</p>
-          <p>Sara: Frontend employee</p>
-          <p>Omar: Backend employee</p>
+          <p className="font-semibold text-slate-700">Demo users:</p>
+          <p>admin@upnext.com — Admin</p>
+          <p>ali@upnext.com — Manager</p>
+          <p>sara@upnext.com — Frontend employee</p>
+          <p>omar@upnext.com — Backend employee</p>
+          <p className="mt-2">Password for all: Password123!</p>
         </div>
       </div>
     </div>
