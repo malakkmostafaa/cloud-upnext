@@ -1,10 +1,43 @@
-export const mockUser = {
-  userId: "ali",
-  name: "Ali",
-  email: "ali@upnext.com",
-  role: "MANAGER",
-  teamId: "all",
-};
+export const mockUsers = [
+  {
+    userId: "admin",
+    name: "Admin",
+    email: "admin@upnext.com",
+    password: "Password123!",
+    role: "ADMIN",
+    teamId: "all",
+    teamName: "All Teams",
+  },
+  {
+    userId: "ali",
+    name: "Ali",
+    email: "ali@upnext.com",
+    password: "Password123!",
+    role: "MANAGER",
+    teamId: "all",
+    teamName: "All Teams",
+  },
+  {
+    userId: "sara",
+    name: "Sara",
+    email: "sara@upnext.com",
+    password: "Password123!",
+    role: "EMPLOYEE",
+    teamId: "frontend",
+    teamName: "Frontend",
+  },
+  {
+    userId: "omar",
+    name: "Omar",
+    email: "omar@upnext.com",
+    password: "Password123!",
+    role: "EMPLOYEE",
+    teamId: "backend",
+    teamName: "Backend",
+  },
+];
+
+export const mockUser = mockUsers[1];
 
 export const mockTeams = [
   { teamId: "frontend", name: "Frontend" },

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./auth/ProtectedRoute";
+import RoleRoute from "./auth/RoleRoute";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -23,7 +24,14 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/board" element={<Board />} />
         <Route path="/projects" element={<Projects />} />
-        <Route path="/users" element={<UsersTeams />} />
+        <Route
+          path="/users"
+                element={
+         <RoleRoute allowedRoles={["ADMIN", "MANAGER"]}>
+      <UsersTeams />
+    </RoleRoute>
+  }
+/>
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -1,6 +1,12 @@
-import { LayoutDashboard, KanbanSquare, FolderKanban, Users, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  KanbanSquare,
+  FolderKanban,
+  Users,
+  LogOut,
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { mockUser } from "../../data/mockData";
+import { useAuth } from "../../context/AuthContext";
 
 function SidebarLink({ to, icon: Icon, children }) {
   return (
@@ -22,9 +28,10 @@ function SidebarLink({ to, icon: Icon, children }) {
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const { user, logout, isAdmin, isManager } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("upnext_token");
+    logout();
     navigate("/login");
   };
 
@@ -32,29 +39,52 @@ export default function AppLayout() {
     <div className="min-h-screen bg-slate-50">
       <aside className="fixed left-0 top-0 h-full w-72 border-r border-slate-200 bg-white px-5 py-6">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-950">UpNext</h1>
-          <p className="mt-1 text-sm text-slate-500">Team task management</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+            UpNext
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Team task management
+          </p>
         </div>
 
         <nav className="space-y-2">
           <SidebarLink to="/dashboard" icon={LayoutDashboard}>
             Dashboard
           </SidebarLink>
+
           <SidebarLink to="/board" icon={KanbanSquare}>
             Task Board
           </SidebarLink>
+
           <SidebarLink to="/projects" icon={FolderKanban}>
             Projects
           </SidebarLink>
-          <SidebarLink to="/users" icon={Users}>
-            Users & Teams
-          </SidebarLink>
+
+          {(isAdmin || isManager) && (
+            <SidebarLink to="/users" icon={Users}>
+              Users & Teams
+            </SidebarLink>
+          )}
         </nav>
 
         <div className="absolute bottom-6 left-5 right-5">
           <div className="mb-4 rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">{mockUser.name}</p>
-            <p className="text-xs text-slate-500">{mockUser.role}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                {user?.name?.charAt(0) || "?"}
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {user?.name || "Unknown User"}
+                </p>
+
+                <p className="text-xs text-slate-500">
+                  {user?.role || "No Role"}
+                  {user?.teamName ? ` · ${user.teamName}` : ""}
+                </p>
+              </div>
+            </div>
           </div>
 
           <button
