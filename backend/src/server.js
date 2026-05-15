@@ -1,11 +1,13 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 
 import usersRoutes from "./routes/users.routes.js";
 import teamsRoutes from "./routes/teams.routes.js";
 
-dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
