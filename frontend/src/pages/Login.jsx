@@ -1,24 +1,101 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import {
+  signIn,
+  fetchAuthSession,
+  confirmSignIn,
+  signOut,
+} from "aws-amplify/auth";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState("ali@upnext.com");
   const [password, setPassword] = useState("Password123!");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+    
 
-    if (!email || !password) {
-      setError("Please enter email and password.");
-      return;
+    try {
+      await signOut();
+      // 1. Login using Cognito
+      const signInResult = await signIn({
+        username: email,
+        password,
+      });
+
+
+      // 2. Handle temporary-password challenge
+      if (
+        signInResult.nextStep?.signInStep ===
+        "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
+      ) {
+        await confirmSignIn({
+        challengeResponse: password,
+        options: {
+        userAttributes: {
+         name: email.split("@")[0],
+    },
+  },
+});
+      }
+
+      // 3. Get Cognito session and ID token
+      const session = await fetchAuthSession();
+
+
+      const idToken = session.tokens?.idToken?.toString();
+
+      if (!idToken) {
+        throw new Error("No ID token returned from Cognito.");
+      }
+
+      // 4. Save token for future API requests
+      localStorage.setItem("idToken", idToken);
+
+      // 5. Ask backend who this user is
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/me`,
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+  const errorData = await response.json();
+  console.error("Backend auth error:", response.status, errorData);
+  throw new Error(errorData.error || "Backend rejected the Cognito token.");
+}
+
+      const user = await response.json();
+
+      // 6. Save user in AuthContext
+      login(user);
+
+      // 7. Redirect based on role
+      if (user.role === "EMPLOYEE") {
+        navigate("/board");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError(
+        err.message ||
+          "Login failed. Check your email, password, or Cognito setup."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    // Temporary mock token until Cognito is connected
-    localStorage.setItem("upnext_token", "mock-token");
-    navigate("/dashboard");
   };
 
   return (
@@ -65,17 +142,20 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white hover:bg-slate-800"
+            disabled={loading}
+            className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Sign in
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
         <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">Demo users later:</p>
-          <p>Ali: Manager</p>
-          <p>Sara: Frontend employee</p>
-          <p>Omar: Backend employee</p>
+          <p className="font-semibold text-slate-700">Demo users:</p>
+          <p>admin@upnext.com — Admin</p>
+          <p>ali@upnext.com — Manager</p>
+          <p>sara@upnext.com — Frontend employee</p>
+          <p>omar@upnext.com — Backend employee</p>
+          <p className="mt-2">Password for all: Password123!</p>
         </div>
       </div>
     </div>
