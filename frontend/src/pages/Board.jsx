@@ -1,110 +1,366 @@
-import { useState } from "react";
-import { mockTasks } from "../data/mockData";
+import {
+  useEffect,
+  useState,
+} from "react";
 
-const columns = ["To Do", "In Progress", "In Review", "Done"];
+import KanbanColumn
+  from "../components/layout/kanban/KanbanColumn";
 
-function priorityClass(priority) {
-  if (priority === "Critical") return "bg-red-100 text-red-700";
-  if (priority === "High") return "bg-orange-100 text-orange-700";
-  if (priority === "Medium") return "bg-yellow-100 text-yellow-700";
-  return "bg-slate-100 text-slate-700";
-}
+import TaskDetailModal
+  from "../components/layout/tasks/TaskDetailModal";
+
+import CreateTaskModal
+  from "../components/layout/tasks/CreateTaskModal";
 
 export default function Board() {
-  const [tasks, setTasks] = useState(mockTasks);
 
-  const moveTask = (taskId, nextStatus) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.taskId === taskId
-          ? { ...task, status: nextStatus, updatedAt: new Date().toISOString() }
-          : task
+  const [tasks, setTasks] =
+    useState([]);
+
+  const [selectedTask, setSelectedTask] =
+    useState(null);
+
+  const [createOpen, setCreateOpen] =
+    useState(false);
+
+  const [selectedTeam, setSelectedTeam] =
+    useState("All");
+
+  /**
+   * LOAD TASKS FROM BACKEND
+   */
+  useEffect(() => {
+
+    async function fetchTasks() {
+
+      try {
+
+        const response =
+          await fetch(
+            "http://localhost:5000/api/tasks"
+          );
+
+        const data =
+          await response.json();
+
+        setTasks(data);
+
+      } catch (error) {
+
+        console.error(
+          "Failed to fetch tasks:",
+          error
+        );
+
+      }
+
+    }
+
+    fetchTasks();
+
+  }, []);
+
+  const columns = [
+    "To Do",
+    "In Progress",
+    "In Review",
+    "Done",
+  ];
+
+  const teams = [
+    "All",
+
+    ...new Set(
+      tasks.map(
+        (task) =>
+          task.teamName
       )
-    );
-  };
+    ),
+  ];
+
+  /**
+   * CREATE TASK
+   */
+  async function handleCreateTask(
+    newTask
+  ) {
+
+    try {
+
+      const response =
+        await fetch(
+          "http://localhost:5000/api/tasks",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify(
+              newTask
+            ),
+          }
+        );
+
+      const savedTask =
+        await response.json();
+
+      setTasks((prev) => [
+        ...prev,
+        savedTask,
+      ]);
+
+      setCreateOpen(false);
+
+    } catch (error) {
+
+      console.error(
+        "Create task failed:",
+        error
+      );
+
+    }
+
+  }
+
+  /**
+   * UPDATE TASK
+   */
+  async function handleSaveTask(
+    updatedTask
+  ) {
+
+    try {
+
+      const response =
+        await fetch(
+
+          `http://localhost:5000/api/tasks/${updatedTask.taskId}`,
+
+          {
+            method: "PUT",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify(
+              updatedTask
+            ),
+          }
+        );
+
+      const savedTask =
+        await response.json();
+
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.taskId ===
+          savedTask.taskId
+            ? savedTask
+            : task
+        )
+      );
+
+      setSelectedTask(savedTask);
+
+    } catch (error) {
+
+      console.error(
+        "Update task failed:",
+        error
+      );
+
+    }
+
+  }
+
+  /**
+   * DELETE TASK
+   */
+  async function handleDeleteTask(
+    taskId
+  ) {
+
+    try {
+
+      await fetch(
+
+        `http://localhost:5000/api/tasks/${taskId}`,
+
+        {
+          method: "DELETE",
+        }
+      );
+
+      setTasks((prev) =>
+        prev.filter(
+          (task) =>
+            task.taskId !== taskId
+        )
+      );
+
+      setSelectedTask(null);
+
+    } catch (error) {
+
+      console.error(
+        "Delete task failed:",
+        error
+      );
+
+    }
+
+  }
 
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
+
+    <div className="flex h-full flex-col">
+
+      <div className="mb-8 flex items-start justify-between">
+
         <div>
-          <h2 className="text-3xl font-bold text-slate-950">Task Board</h2>
-          <p className="mt-2 text-slate-500">
-            Track work across To Do, In Progress, In Review, and Done.
+
+          <h1 className="text-5xl font-bold text-slate-950">
+            Task Board
+          </h1>
+
+          <p className="mt-2 text-lg text-slate-500">
+            Track work across To Do,
+            In Progress,
+            In Review,
+            and Done.
           </p>
+
         </div>
 
-        <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-          New Task
-        </button>
+        <div className="flex items-center gap-4">
+
+          <select
+            value={selectedTeam}
+            onChange={(e) =>
+              setSelectedTeam(
+                e.target.value
+              )
+            }
+            className="
+              rounded-2xl border
+              border-slate-200
+              bg-white px-4 py-4
+              text-sm font-medium
+              text-slate-700
+              outline-none
+            "
+          >
+
+            {teams.map((team) => (
+
+              <option
+                key={team}
+                value={team}
+              >
+                {team}
+              </option>
+
+            ))}
+
+          </select>
+
+          <button
+            onClick={() =>
+              setCreateOpen(true)
+            }
+            className="
+              rounded-2xl bg-slate-950
+              px-6 py-4 font-semibold
+              text-white transition
+              hover:bg-slate-800
+            "
+          >
+            New Task
+          </button>
+
+        </div>
+
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-4">
+      <div
+        className="
+          grid flex-1 gap-6
+          xl:grid-cols-4
+          md:grid-cols-2
+          grid-cols-1
+        "
+      >
+
         {columns.map((column) => {
-          const columnTasks = tasks.filter((task) => task.status === column);
+
+          const columnTasks =
+            tasks.filter((task) => {
+
+              const matchesStatus =
+                task.status === column;
+
+              const matchesTeam =
+                selectedTeam === "All"
+                || task.teamName === selectedTeam;
+
+              return (
+                matchesStatus
+                && matchesTeam
+              );
+            });
 
           return (
-            <div
+
+            <KanbanColumn
               key={column}
-              className="min-h-[600px] rounded-3xl border border-slate-200 bg-white p-4"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-semibold text-slate-900">{column}</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                  {columnTasks.length}
-                </span>
-              </div>
+              title={column}
+              tasks={columnTasks}
+              onTaskClick={
+                setSelectedTask
+              }
+            />
 
-              <div className="space-y-3">
-                {columnTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
-                    No tasks here
-                  </div>
-                ) : (
-                  columnTasks.map((task) => (
-                    <div
-                      key={task.taskId}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
-                    >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <h4 className="font-semibold text-slate-950">{task.title}</h4>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${priorityClass(
-                            task.priority
-                          )}`}
-                        >
-                          {task.priority}
-                        </span>
-                      </div>
-
-                      <p className="line-clamp-2 text-sm text-slate-500">
-                        {task.description}
-                      </p>
-
-                      <div className="mt-4 space-y-1 text-xs text-slate-500">
-                        <p>Team: {task.teamName}</p>
-                        <p>Assignee: {task.assigneeName}</p>
-                        <p>Deadline: {task.deadline}</p>
-                      </div>
-
-                      <select
-                        className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                        value={task.status}
-                        onChange={(e) => moveTask(task.taskId, e.target.value)}
-                      >
-                        {columns.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
           );
+
         })}
+
       </div>
+
+      <TaskDetailModal
+        open={!!selectedTask}
+
+        onOpenChange={() =>
+          setSelectedTask(null)
+        }
+
+        task={selectedTask}
+
+        onSaveTask={
+          handleSaveTask
+        }
+
+        onDeleteTask={
+          handleDeleteTask
+        }
+      />
+
+      <CreateTaskModal
+        open={createOpen}
+
+        onOpenChange={
+          setCreateOpen
+        }
+
+        onCreateTask={
+          handleCreateTask
+        }
+      />
+
     </div>
   );
 }
