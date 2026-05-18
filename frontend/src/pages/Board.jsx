@@ -1,11 +1,14 @@
 import { useState } from "react";
 
-import mockTasks from "../mock/tasks";
+import KanbanColumn from "../components/layout/kanban/KanbanColumn";
 
-import KanbanColumn from "../components/kanban/KanbanColumn";
-import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import TaskDetailModal from "../components/layout/tasks/TaskDetailModal";
 
-function Board() {
+import CreateTaskModal from "../components/layout/tasks/CreateTaskModal";
+
+import { mockTasks } from "../data/mockData";
+
+export default function Board() {
 
   const [tasks, setTasks] =
     useState(mockTasks);
@@ -13,11 +16,8 @@ function Board() {
   const [selectedTask, setSelectedTask] =
     useState(null);
 
-  const [search, setSearch] =
-    useState("");
-
-  const [teamFilter, setTeamFilter] =
-    useState("All");
+  const [createOpen, setCreateOpen] =
+    useState(false);
 
   const columns = [
     "To Do",
@@ -26,126 +26,114 @@ function Board() {
     "Done",
   ];
 
-  const filteredTasks =
-    tasks.filter((task) => {
+  const handleCreateTask = (
+    newTask
+  ) => {
 
-      const matchesSearch =
-        task.title
-          .toLowerCase()
-          .includes(search.toLowerCase()) ||
-
-        task.assigneeName
-          .toLowerCase()
-          .includes(search.toLowerCase());
-
-      const matchesTeam =
-        teamFilter === "All" ||
-        task.teamName === teamFilter;
-
-      return (
-        matchesSearch &&
-        matchesTeam
-      );
-    });
-
-  function handleDropTask(
-    taskId,
-    newStatus
-  ) {
-
-    setTasks((prevTasks) =>
-      prevTasks.map((task) =>
-        task.taskId === taskId
-          ? {
-              ...task,
-              status: newStatus,
-            }
-          : task
-      )
-    );
-  }
+    setTasks((prev) => [
+      ...prev,
+      newTask,
+    ]);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-200 p-6">
+    <div className="flex h-full flex-col">
 
-      <h1 className="text-4xl font-bold mb-8">
-        UpNext Kanban Board
-      </h1>
+      <div className="mb-8 flex items-start justify-between">
 
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div>
 
-        <input
-          type="text"
-          placeholder="Search tasks..."
-          value={search}
-          onChange={(e) =>
-            setSearch(
-              e.target.value
-            )
+          <h1
+            className="
+              text-5xl font-bold
+              text-slate-950
+            "
+          >
+            Task Board
+          </h1>
+
+          <p
+            className="
+              mt-2 text-lg
+              text-slate-500
+            "
+          >
+            Track work across
+            To Do,
+            In Progress,
+            In Review,
+            and Done.
+          </p>
+
+        </div>
+
+        <button
+          onClick={() =>
+            setCreateOpen(true)
           }
-          className="p-3 rounded-xl border w-full md:w-[300px]"
-        />
-
-        <select
-          value={teamFilter}
-          onChange={(e) =>
-            setTeamFilter(
-              e.target.value
-            )
-          }
-          className="p-3 rounded-xl border w-full md:w-[200px]"
+          className="
+            rounded-2xl
+            bg-slate-950
+            px-6 py-4
+            font-semibold text-white
+            transition
+            hover:bg-slate-800
+          "
         >
-
-          <option value="All">
-            All Teams
-          </option>
-
-          <option value="Frontend">
-            Frontend
-          </option>
-
-          <option value="Backend">
-            Backend
-          </option>
-
-        </select>
+          New Task
+        </button>
 
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div
+        className="
+          grid flex-1 gap-6
+          xl:grid-cols-4
+          md:grid-cols-2
+          grid-cols-1
+        "
+      >
 
-        {columns.map((column) => (
+        {columns.map((column) => {
 
-          <KanbanColumn
-            key={column}
-            title={column}
-
-            tasks={filteredTasks.filter(
+          const columnTasks =
+            tasks.filter(
               (task) =>
                 task.status === column
-            )}
+            );
 
-            onTaskClick={
-              setSelectedTask
-            }
-
-            onDropTask={
-              handleDropTask
-            }
-          />
-        ))}
+          return (
+            <KanbanColumn
+              key={column}
+              title={column}
+              tasks={columnTasks}
+              onTaskClick={
+                setSelectedTask
+              }
+            />
+          );
+        })}
 
       </div>
 
       <TaskDetailModal
-        task={selectedTask}
-        onClose={() =>
+        open={!!selectedTask}
+        onOpenChange={() =>
           setSelectedTask(null)
+        }
+        task={selectedTask}
+      />
+
+      <CreateTaskModal
+        open={createOpen}
+        onOpenChange={
+          setCreateOpen
+        }
+        onCreateTask={
+          handleCreateTask
         }
       />
 
     </div>
   );
 }
-
-export default Board;
