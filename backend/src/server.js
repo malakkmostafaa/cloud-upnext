@@ -6,6 +6,7 @@ import cors from "cors";
 
 import usersRoutes from "./routes/users.routes.js";
 import teamsRoutes from "./routes/teams.routes.js";
+import projectsRoutes from "./routes/projects.routes.js";
 
 
 
@@ -21,6 +22,7 @@ app.get("/", (req, res) => {
 
 app.use("/api", usersRoutes);
 app.use("/api", teamsRoutes);
+app.use("/api", projectsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

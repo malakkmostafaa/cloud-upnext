@@ -1,22 +1,31 @@
-const { randomUUID } = require("crypto");
-const {
+import { randomUUID } from "crypto";
+
+import {
   GetCommand,
   PutCommand,
   ScanCommand,
   UpdateCommand,
   DeleteCommand,
-} = require("@aws-sdk/lib-dynamodb");
+} from "@aws-sdk/lib-dynamodb";
 
-const docClient = require("../db/dynamo");
-const { Tables } = require("../config/tables");
-const { ApiError } = require("../utils/errors");
+import { docClient } from "../db/dynamo.js";
+import { Tables } from "../config/tables.js";
+import { ApiError } from "../utils/errors.js";
 
-async function createProject({ name, description, createdBy }) {
+// CREATE PROJECT
+async function createProject({
+  name,
+  description,
+  teamId,
+  createdBy,
+}) {
   const now = new Date().toISOString();
+
   const project = {
     projectId: randomUUID(),
     name,
     description: description ?? null,
+    teamId: teamId || "all",
     createdBy,
     createdAt: now,
     updatedAt: now,
@@ -33,6 +42,7 @@ async function createProject({ name, description, createdBy }) {
   return project;
 }
 
+// GET PROJECT BY ID
 async function getProjectById(projectId) {
   const { Item } = await docClient.send(
     new GetCommand({
@@ -40,35 +50,52 @@ async function getProjectById(projectId) {
       Key: { projectId },
     })
   );
+
   return Item || null;
 }
 
+// LIST PROJECTS
 async function listProjects() {
-  // Projects are company-wide (managers create them, all roles can read).
-  // Volume is low, so a Scan is acceptable here.
   const { Items } = await docClient.send(
-    new ScanCommand({ TableName: Tables.PROJECTS })
+    new ScanCommand({
+      TableName: Tables.PROJECTS,
+    })
   );
+
   return Items || [];
 }
 
+// UPDATE PROJECT
 async function updateProject(projectId, patch) {
   const fields = Object.keys(patch);
+
   if (fields.length === 0) {
     const existing = await getProjectById(projectId);
-    if (!existing) throw ApiError.notFound("Project not found");
+
+    if (!existing) {
+      throw ApiError.notFound("Project not found");
+    }
+
     return existing;
   }
 
-  const ExpressionAttributeNames = { "#updatedAt": "updatedAt" };
-  const ExpressionAttributeValues = { ":updatedAt": new Date().toISOString() };
+  const ExpressionAttributeNames = {
+    "#updatedAt": "updatedAt",
+  };
+
+  const ExpressionAttributeValues = {
+    ":updatedAt": new Date().toISOString(),
+  };
+
   const sets = ["#updatedAt = :updatedAt"];
 
   fields.forEach((field, i) => {
     const nameKey = `#f${i}`;
     const valueKey = `:v${i}`;
+
     ExpressionAttributeNames[nameKey] = field;
     ExpressionAttributeValues[valueKey] = patch[field];
+
     sets.push(`${nameKey} = ${valueKey}`);
   });
 
@@ -77,28 +104,36 @@ async function updateProject(projectId, patch) {
       new UpdateCommand({
         TableName: Tables.PROJECTS,
         Key: { projectId },
+
         UpdateExpression: `SET ${sets.join(", ")}`,
+
         ConditionExpression: "attribute_exists(projectId)",
+
         ExpressionAttributeNames,
         ExpressionAttributeValues,
+
         ReturnValues: "ALL_NEW",
       })
     );
+
     return Attributes;
   } catch (err) {
     if (err.name === "ConditionalCheckFailedException") {
       throw ApiError.notFound("Project not found");
     }
+
     throw err;
   }
 }
 
+// DELETE PROJECT
 async function deleteProject(projectId) {
   try {
     await docClient.send(
       new DeleteCommand({
         TableName: Tables.PROJECTS,
         Key: { projectId },
+
         ConditionExpression: "attribute_exists(projectId)",
       })
     );
@@ -106,11 +141,12 @@ async function deleteProject(projectId) {
     if (err.name === "ConditionalCheckFailedException") {
       throw ApiError.notFound("Project not found");
     }
+
     throw err;
   }
 }
 
-module.exports = {
+export {
   createProject,
   getProjectById,
   listProjects,
