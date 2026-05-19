@@ -15,8 +15,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = (userData, token) => {
-    localStorage.setItem("upnext_token", token);
+  const login = (userData) => {
+    //localStorage.setItem("upnext_token", token);
     localStorage.setItem("upnext_user", JSON.stringify(userData));
     setUser(userData);
   };
