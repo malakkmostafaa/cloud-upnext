@@ -58,7 +58,7 @@ export default function Login() {
       }
 
       // 4. Save token for future API requests
-      localStorage.setItem("idToken", idToken);
+      //localStorage.setItem("idToken", idToken);
 
       // 5. Ask backend who this user is
       const response = await fetch(
@@ -79,7 +79,7 @@ export default function Login() {
       const user = await response.json();
 
       // 6. Save user in AuthContext
-      login(user);
+      login(user, idToken);
 
       // 7. Redirect based on role
       if (user.role === "EMPLOYEE") {
