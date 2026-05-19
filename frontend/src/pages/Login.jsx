@@ -52,13 +52,14 @@ export default function Login() {
 
 
       const idToken = session.tokens?.idToken?.toString();
+      console.log("ID TOKEN:", idToken);
 
       if (!idToken) {
         throw new Error("No ID token returned from Cognito.");
       }
 
       // 4. Save token for future API requests
-      //localStorage.setItem("idToken", idToken);
+      localStorage.setItem("idToken", idToken);
 
       // 5. Ask backend who this user is
       const response = await fetch(
