@@ -1,110 +1,27 @@
-import express from "express";
+const express = require("express");
 
-import {
-  createTask,
-  listTasks,
-  updateTask,
-  deleteTask,
-} from "../services/tasks.service.js";
+const { requireAuth, requireRole } = require("../middleware/auth");
+const { Role } = require("../config/constants");
+const { validateTaskPayload } = require("../utils/validate");
+const tasksService = require("../services/tasks.service");
 
 const router = express.Router();
 
-/**
- * GET ALL TASKS
- */
-router.get("/", async (req, res) => {
-
-  try {
-
-    const tasks =
-      await listTasks();
-
-    res.json(tasks);
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: error.message,
-    });
-
+// Member 2 owns task CREATION only.
+// GET / PUT / DELETE on tasks belong to other team members.
+router.post(
+  "/tasks",
+  requireAuth,
+  requireRole(Role.MANAGER),
+  async (req, res, next) => {
+    try {
+      const payload = validateTaskPayload(req.body);
+      const task = await tasksService.createTask(payload, req.user.sub);
+      res.status(201).json(task);
+    } catch (err) {
+      next(err);
+    }
   }
+);
 
-});
-
-/**
- * CREATE TASK
- */
-router.post("/", async (req, res) => {
-
-  try {
-
-    const task =
-      await createTask(
-        req.body,
-        "manager-demo"
-      );
-
-    res.status(201).json(task);
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: error.message,
-    });
-
-  }
-
-});
-
-/**
- * UPDATE TASK
- */
-router.put("/:taskId", async (req, res) => {
-
-  try {
-
-    const updatedTask =
-      await updateTask(
-        req.params.taskId,
-        req.body
-      );
-
-    res.json(updatedTask);
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: error.message,
-    });
-
-  }
-
-});
-
-/**
- * DELETE TASK
- */
-router.delete("/:taskId", async (req, res) => {
-
-  try {
-
-    await deleteTask(
-      req.params.taskId
-    );
-
-    res.json({
-      message:
-        "Task deleted successfully",
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      message: error.message,
-    });
-
-  }
-
-});
-
-export default router;
+module.exports = router;
