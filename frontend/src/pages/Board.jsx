@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useState } from "react";
 
 import toast from "react-hot-toast";
 
@@ -25,6 +22,14 @@ import TaskDetailModal
 
 import CreateTaskModal
   from "../components/tasks/CreateTaskModal";
+const columns = ["To Do", "In Progress", "In Review", "Done"];
+
+function priorityClass(priority) {
+  if (priority === "Critical") return "bg-red-100 text-red-700";
+  if (priority === "High") return "bg-orange-100 text-orange-700";
+  if (priority === "Medium") return "bg-yellow-100 text-yellow-700";
+  return "bg-slate-100 text-slate-700";
+}
 
 export default function Board() {
 
@@ -343,13 +348,19 @@ export default function Board() {
     }
 
   }
+  const moveTask = (taskId, nextStatus) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.taskId === taskId
+          ? { ...task, status: nextStatus, updatedAt: new Date().toISOString() }
+          : task
+      )
+    );
+  };
 
   return (
-
-    <div className="flex h-full flex-col">
-
-      <div className="mb-8 flex items-start justify-between">
-
+    <div>
+      <div className="mb-8 flex items-center justify-between">
         <div>
 
           <h1 className="text-5xl font-bold text-slate-950">
@@ -438,6 +449,9 @@ export default function Board() {
 
         </div>
 
+        <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
+          New Task
+        </button>
       </div>
 
       <DragDropContext

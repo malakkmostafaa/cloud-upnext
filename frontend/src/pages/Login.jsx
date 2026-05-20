@@ -50,8 +50,9 @@ export default function Login() {
       // 3. Get Cognito session and ID token
       const session = await fetchAuthSession();
 
-      const idToken =
-        session.tokens?.idToken?.toString();
+
+      const idToken = session.tokens?.idToken?.toString();
+      console.log("ID TOKEN:", idToken);
 
       if (!idToken) {
 
@@ -102,7 +103,7 @@ export default function Login() {
         await response.json();
 
       // 6. Save user in AuthContext
-      login(user);
+      login(user, idToken);
 
       // 7. Redirect based on role
       if (user.role === "EMPLOYEE") {

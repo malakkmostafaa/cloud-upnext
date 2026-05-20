@@ -9,12 +9,10 @@ import {
   createAuditLog,
 } from "../services/audit.service.js";
 
-import {
-  createTask,
-  listTasks,
-  updateTask,
-  deleteTask,
-} from "../services/tasks.service.js";
+const { requireAuth, requireRole } = require("../middleware/auth");
+const { Role } = require("../config/constants");
+const { validateTaskPayload } = require("../utils/validate");
+const tasksService = require("../services/tasks.service");
 
 const router =
   express.Router();

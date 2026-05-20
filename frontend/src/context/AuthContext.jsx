@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = (userData) => {
-    localStorage.setItem("upnext_token", "mock-token");
+    //localStorage.setItem("upnext_token", token);
     localStorage.setItem("upnext_user", JSON.stringify(userData));
     setUser(userData);
   };

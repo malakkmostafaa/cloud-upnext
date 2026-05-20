@@ -1,21 +1,10 @@
-import {
-  DynamoDBClient,
-} from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
-import {
-  DynamoDBDocumentClient,
-} from "@aws-sdk/lib-dynamodb";
+const client = new DynamoDBClient({
+  region: process.env.AWS_REGION || "eu-central-1",
+});
 
-const dynamoClient =
-  new DynamoDBClient({
-    region:
-      process.env.AWS_REGION
-      || "eu-central-1",
-  });
+const docClient = DynamoDBDocumentClient.from(client);
 
-const docClient =
-  DynamoDBDocumentClient.from(
-    dynamoClient
-  );
-
-export default docClient;
+export { docClient };
