@@ -31,16 +31,16 @@ export default function CreateTaskModal({
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const newTask = {
-      taskId: Date.now(),
-      title,
-      description,
-      priority,
-      status,
-      assigneeName,
-      teamName,
-      deadline,
-    };
+   const newTask = {
+  title,
+  description,
+  priority,
+  status,
+  assigneeName,
+  teamName:
+    teamName.trim(),
+  deadline,
+};
 
     onCreateTask(newTask);
 

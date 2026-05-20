@@ -4,6 +4,8 @@ import {
 } from "react";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { useAuth }
+  from "../../context/AuthContext";
 
 export default function TaskDetailModal({
   open,
@@ -12,6 +14,8 @@ export default function TaskDetailModal({
   onSaveTask,
   onDeleteTask,
 }) {
+  const { user } =
+  useAuth();
 
   const [isEditing, setIsEditing] =
     useState(false);
@@ -75,7 +79,11 @@ export default function TaskDetailModal({
 
             <div className="flex-1">
 
-              {isEditing ? (
+             {isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                 <input
                   value={editedTask?.title || ""}
@@ -106,7 +114,11 @@ export default function TaskDetailModal({
                     {task.title}
                   </Dialog.Title>
 
-                  {isEditing ? (
+                {isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                     <textarea
                       value={
@@ -145,50 +157,65 @@ export default function TaskDetailModal({
 
               {isEditing ? (
 
-                <button
-                  onClick={handleSave}
-                  className="
-                    rounded-xl
-                    bg-green-600
-                    px-4 py-2
-                    text-sm font-semibold
-                    text-white
-                  "
-                >
-                  Save
-                </button>
+  <button
+    onClick={handleSave}
+    className="
+      rounded-xl
+      bg-green-600
+      px-4 py-2
+      text-sm font-semibold
+      text-white
+    "
+  >
+    Save
+  </button>
 
-              ) : (
+) : (
 
-                <button
-                  onClick={() =>
-                    setIsEditing(true)
-                  }
-                  className="
-                    rounded-xl
-                    bg-slate-900
-                    px-4 py-2
-                    text-sm font-semibold
-                    text-white
-                  "
-                >
-                  Edit
-                </button>
+  (
+  user?.role === "manager" ||
+  user?.role === "admin" ||
+  user?.role === "employee"
+) && (
 
-              )}
+    <button
+      onClick={() =>
+        setIsEditing(true)
+      }
+      className="
+        rounded-xl
+        bg-slate-950
+        px-4 py-2
+        text-sm font-semibold
+        text-white
+      "
+    >
+      Edit
+    </button>
 
-              <button
-                onClick={handleDelete}
-                className="
-                  rounded-xl
-                  bg-red-600
-                  px-4 py-2
-                  text-sm font-semibold
-                  text-white
-                "
-              >
-                Delete
-              </button>
+  )
+
+)}
+
+              {(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) && (
+
+  <button
+    onClick={handleDelete}
+    className="
+      rounded-xl
+      bg-red-600
+      px-4 py-2
+      text-sm font-semibold
+      text-white
+    "
+  >
+    Delete
+  </button>
+
+)}
 
               <Dialog.Close
                 className="
@@ -211,7 +238,11 @@ export default function TaskDetailModal({
                 Team
               </p>
 
-              {isEditing ? (
+              {isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                 <input
                   value={
@@ -248,7 +279,11 @@ export default function TaskDetailModal({
                 Assignee
               </p>
 
-              {isEditing ? (
+              {isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                 <input
                   value={
@@ -339,8 +374,11 @@ export default function TaskDetailModal({
               <p className="text-sm text-slate-500">
                 Priority
               </p>
-
-              {isEditing ? (
+{isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                 <select
                   value={
@@ -391,7 +429,11 @@ export default function TaskDetailModal({
                 Deadline
               </p>
 
-              {isEditing ? (
+             {isEditing &&
+(
+  user?.role === "manager" ||
+  user?.role === "admin"
+) ? (
 
                 <input
                   type="date"

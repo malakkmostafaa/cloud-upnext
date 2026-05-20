@@ -1,48 +1,41 @@
-import TaskCard from "../tasks/TaskCard";
-
 function KanbanColumn({
   title,
-  tasks,
-  onTaskClick,
-  onDropTask,
+  children,
 }) {
 
-  function handleDrop(e) {
-    e.preventDefault();
-
-    const taskId =
-      e.dataTransfer.getData("taskId");
-
-    onDropTask(taskId, title);
-  }
-
   return (
+
     <div
-      onDragOver={(e) =>
-        e.preventDefault()
-      }
-      onDrop={handleDrop}
-      className="bg-gray-100 rounded-2xl p-4 w-full min-h-[500px]"
+      className="
+        bg-gray-100
+        rounded-3xl
+        p-4
+        min-h-[700px]
+        flex flex-col
+      "
     >
-      <h2 className="text-xl font-bold mb-4">
+
+      <h2
+        className="
+          text-2xl
+          font-bold
+          mb-6
+          text-slate-900
+        "
+      >
         {title}
       </h2>
 
       <div className="space-y-4">
 
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.taskId}
-            task={task}
-            onClick={() =>
-              onTaskClick(task)
-            }
-          />
-        ))}
+        {children}
 
       </div>
+
     </div>
+
   );
+
 }
 
 export default KanbanColumn;

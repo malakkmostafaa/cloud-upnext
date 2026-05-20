@@ -50,19 +50,26 @@ export default function Login() {
       // 3. Get Cognito session and ID token
       const session = await fetchAuthSession();
 
-
-      const idToken = session.tokens?.idToken?.toString();
+      const idToken =
+        session.tokens?.idToken?.toString();
 
       if (!idToken) {
-        throw new Error("No ID token returned from Cognito.");
+
+        throw new Error(
+          "No ID token returned from Cognito."
+        );
+
       }
 
-      // 4. Save token for future API requests
-      localStorage.setItem("idToken", idToken);
+      localStorage.setItem(
+        "token",
+        idToken
+      );
 
-      // 5. Ask backend who this user is
+
+            // 5. Ask backend who this user is
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/me`,
+        `${import.meta.env.VITE_API_BASE_URL}/api/auth/me`,
         {
           headers: {
             Authorization: `Bearer ${idToken}`,
@@ -71,12 +78,28 @@ export default function Login() {
       );
 
       if (!response.ok) {
-  const errorData = await response.json();
-  console.error("Backend auth error:", response.status, errorData);
-  throw new Error(errorData.error || "Backend rejected the Cognito token.");
-}
 
-      const user = await response.json();
+        const errorData =
+          await response.json();
+
+        console.error(
+          "Backend auth error:",
+          response.status,
+          errorData
+        );
+
+        throw new Error(
+
+          errorData.message ||
+
+          "Backend rejected the Cognito token."
+
+        );
+
+      }
+
+      const user =
+        await response.json();
 
       // 6. Save user in AuthContext
       login(user);

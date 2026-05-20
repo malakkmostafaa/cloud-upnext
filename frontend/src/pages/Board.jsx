@@ -3,16 +3,33 @@ import {
   useState,
 } from "react";
 
+import toast from "react-hot-toast";
+
+import { useAuth }
+  from "../context/AuthContext";
+
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from "@hello-pangea/dnd";
+
 import KanbanColumn
-  from "../components/layout/kanban/KanbanColumn";
+  from "../components/kanban/KanbanColumn";
+
+import TaskCard
+  from "../components/tasks/TaskCard";
 
 import TaskDetailModal
-  from "../components/layout/tasks/TaskDetailModal";
+  from "../components/tasks/TaskDetailModal";
 
 import CreateTaskModal
-  from "../components/layout/tasks/CreateTaskModal";
+  from "../components/tasks/CreateTaskModal";
 
 export default function Board() {
+
+  const { user } =
+    useAuth();
 
   const [tasks, setTasks] =
     useState([]);
@@ -27,7 +44,7 @@ export default function Board() {
     useState("All");
 
   /**
-   * LOAD TASKS FROM BACKEND
+   * LOAD TASKS
    */
   useEffect(() => {
 
@@ -35,9 +52,26 @@ export default function Board() {
 
       try {
 
+        const token =
+          localStorage.getItem(
+            "token"
+          );
+
         const response =
           await fetch(
-            "http://localhost:5000/api/tasks"
+            "http://localhost:5000/api/tasks",
+            {
+
+              cache: "no-store",
+
+              headers: {
+
+                Authorization:
+                  `Bearer ${token}`,
+
+              },
+
+            }
           );
 
         const data =
@@ -48,7 +82,7 @@ export default function Board() {
       } catch (error) {
 
         console.error(
-          "Failed to fetch tasks:",
+          "FETCH TASKS ERROR:",
           error
         );
 
@@ -61,21 +95,27 @@ export default function Board() {
   }, []);
 
   const columns = [
+
     "To Do",
     "In Progress",
     "In Review",
     "Done",
+
   ];
 
   const teams = [
+
     "All",
 
     ...new Set(
+
       tasks.map(
         (task) =>
           task.teamName
       )
+
     ),
+
   ];
 
   /**
@@ -91,16 +131,30 @@ export default function Board() {
         await fetch(
           "http://localhost:5000/api/tasks",
           {
+
             method: "POST",
 
             headers: {
+
               "Content-Type":
                 "application/json",
+
+              Authorization:
+                `Bearer ${localStorage.getItem("token")}`,
+
             },
 
-            body: JSON.stringify(
-              newTask
-            ),
+            body: JSON.stringify({
+
+              ...newTask,
+
+              teamName:
+                newTask.teamName
+                  ?.trim()
+                  .toLowerCase(),
+
+            }),
+
           }
         );
 
@@ -108,17 +162,27 @@ export default function Board() {
         await response.json();
 
       setTasks((prev) => [
+
         ...prev,
         savedTask,
+
       ]);
 
       setCreateOpen(false);
+
+      toast.success(
+        "Task created successfully!"
+      );
 
     } catch (error) {
 
       console.error(
         "Create task failed:",
         error
+      );
+
+      toast.error(
+        "Failed to create task"
       );
 
     }
@@ -140,38 +204,69 @@ export default function Board() {
           `http://localhost:5000/api/tasks/${updatedTask.taskId}`,
 
           {
+
             method: "PUT",
 
             headers: {
+
               "Content-Type":
                 "application/json",
+
+              Authorization:
+                `Bearer ${localStorage.getItem("token")}`,
+
             },
 
-            body: JSON.stringify(
-              updatedTask
-            ),
+            body: JSON.stringify({
+
+              ...updatedTask,
+
+              teamName:
+                updatedTask.teamName
+                  ?.trim()
+                  .toLowerCase(),
+
+            }),
+
           }
+
         );
 
       const savedTask =
         await response.json();
 
       setTasks((prev) =>
+
         prev.map((task) =>
+
           task.taskId ===
           savedTask.taskId
+
             ? savedTask
+
             : task
+
         )
+
       );
 
-      setSelectedTask(savedTask);
+      setSelectedTask(
+        savedTask
+      );
+
+      toast.success(
+        "Task updated successfully!"
+      );
 
     } catch (error) {
 
       console.error(
         "Update task failed:",
         error
+      );
+
+      toast.error(
+        "Failed to update task"
       );
 
     }
@@ -187,29 +282,62 @@ export default function Board() {
 
     try {
 
-      await fetch(
+      const response =
+        await fetch(
 
-        `http://localhost:5000/api/tasks/${taskId}`,
+          `http://localhost:5000/api/tasks/${taskId}`,
 
-        {
-          method: "DELETE",
-        }
-      );
+          {
+
+            method: "DELETE",
+
+            headers: {
+
+              Authorization:
+                `Bearer ${localStorage.getItem("token")}`,
+
+            },
+
+          }
+
+        );
+
+      if (!response.ok) {
+
+        throw new Error(
+          "Delete request failed"
+        );
+
+      }
 
       setTasks((prev) =>
+
         prev.filter(
+
           (task) =>
-            task.taskId !== taskId
+
+            task.taskId !==
+            taskId
+
         )
+
       );
 
       setSelectedTask(null);
 
+      toast.success(
+        "Task deleted successfully!"
+      );
+
     } catch (error) {
 
       console.error(
-        "Delete task failed:",
+        "Delete failed:",
         error
+      );
+
+      toast.error(
+        "Failed to delete task"
       );
 
     }
@@ -229,7 +357,8 @@ export default function Board() {
           </h1>
 
           <p className="mt-2 text-lg text-slate-500">
-            Track work across To Do,
+            Track work across
+            To Do,
             In Progress,
             In Review,
             and Done.
@@ -239,97 +368,398 @@ export default function Board() {
 
         <div className="flex items-center gap-4">
 
-          <select
-            value={selectedTeam}
-            onChange={(e) =>
-              setSelectedTeam(
-                e.target.value
-              )
-            }
-            className="
-              rounded-2xl border
-              border-slate-200
-              bg-white px-4 py-4
-              text-sm font-medium
-              text-slate-700
-              outline-none
-            "
-          >
+          {(
+            user?.role === "manager"
+            ||
 
-            {teams.map((team) => (
+            user?.role === "admin"
+          ) && (
 
-              <option
-                key={team}
-                value={team}
-              >
-                {team}
-              </option>
+            <select
+              value={selectedTeam}
 
-            ))}
+              onChange={(e) =>
+                setSelectedTeam(
+                  e.target.value
+                )
+              }
 
-          </select>
+              className="
+                rounded-2xl border
+                border-slate-200
+                bg-white px-4 py-4
+                text-sm font-medium
+                text-slate-700
+                outline-none
+              "
+            >
 
-          <button
-            onClick={() =>
-              setCreateOpen(true)
-            }
-            className="
-              rounded-2xl bg-slate-950
-              px-6 py-4 font-semibold
-              text-white transition
-              hover:bg-slate-800
-            "
-          >
-            New Task
-          </button>
+              {teams.map((team) => (
+
+                <option
+                  key={team}
+                  value={team}
+                >
+                  {team}
+                </option>
+
+              ))}
+
+            </select>
+
+          )}
+
+          {(
+            user?.role === "manager"
+            ||
+
+            user?.role === "admin"
+          ) && (
+
+            <button
+              onClick={() =>
+                setCreateOpen(true)
+              }
+
+              className="
+                rounded-2xl
+                bg-slate-950
+                px-6 py-4
+                font-semibold
+                text-white
+                transition
+                hover:bg-slate-800
+              "
+            >
+              New Task
+            </button>
+
+          )}
 
         </div>
 
       </div>
 
-      <div
-        className="
-          grid flex-1 gap-6
-          xl:grid-cols-4
-          md:grid-cols-2
-          grid-cols-1
-        "
+      <DragDropContext
+
+        onDragEnd={async (result) => {
+
+          if (!result.destination)
+            return;
+
+          const taskId =
+            result.draggableId;
+
+          const newStatus =
+            result.destination
+              .droppableId;
+
+          const task =
+            tasks.find(
+
+              (t) =>
+                t.taskId ===
+                taskId
+
+            );
+
+          if (!task)
+            return;
+
+          const updatedTask = {
+
+            ...task,
+
+            status:
+              newStatus,
+
+          };
+
+          const canUpdate =
+
+  user?.role === "manager"
+
+  ||
+
+  user?.role === "admin"
+
+  ||
+
+  (
+
+    task.assigneeName
+      ?.toLowerCase()
+      .trim()
+
+    ===
+
+    user?.name
+      ?.toLowerCase()
+      .trim()
+
+  );
+
+if (!canUpdate) {
+
+  toast.error(
+    "You cannot update teammate tasks"
+  );
+
+  return;
+
+}
+
+try {
+
+  /**
+   * SAVE OLD TASKS
+   */
+  const oldTasks = [...tasks];
+
+  /**
+   * UPDATE UI
+   */
+  setTasks((prev) =>
+
+    prev.map((t) =>
+
+      t.taskId === taskId
+
+        ? updatedTask
+
+        : t
+
+    )
+
+  );
+
+  /**
+   * UPDATE BACKEND
+   */
+  await handleSaveTask(
+    updatedTask
+  );
+
+} catch (error) {
+
+  /**
+   * RESTORE UI
+   */
+  setTasks(oldTasks);
+
+  toast.error(
+    "Failed to update task"
+  );
+
+}
+
+        }}
+
       >
 
-        {columns.map((column) => {
+        <div
+          className="
+            grid flex-1 gap-6
+            xl:grid-cols-4
+            md:grid-cols-2
+            grid-cols-1
+          "
+        >
 
-          const columnTasks =
-            tasks.filter((task) => {
+          {columns.map((column) => {
 
-              const matchesStatus =
-                task.status === column;
+            const columnTasks =
+              tasks.filter((task) => {
 
-              const matchesTeam =
-                selectedTeam === "All"
-                || task.teamName === selectedTeam;
+                const matchesStatus =
+                  task.status === column;
 
-              return (
-                matchesStatus
-                && matchesTeam
-              );
-            });
+                const matchesTeam =
 
-          return (
+                  (
+                    user?.role === "manager"
+                    ||
 
-            <KanbanColumn
-              key={column}
-              title={column}
-              tasks={columnTasks}
-              onTaskClick={
-                setSelectedTask
-              }
-            />
+                    user?.role === "admin"
+                  )
 
-          );
+                    ? (
 
-        })}
+                        selectedTeam === "All"
+                        ||
 
-      </div>
+                        task.teamName
+                          ?.toLowerCase()
+                          .trim() ===
+
+                        selectedTeam
+                          ?.toLowerCase()
+                          .trim()
+
+                      )
+
+                    : (
+
+                        task.teamName
+                          ?.toLowerCase()
+                          .trim() ===
+
+                        user?.team
+                          ?.toLowerCase()
+                          .trim()
+
+                      );
+
+                return (
+                  matchesStatus
+                  &&
+                  matchesTeam
+                );
+
+              });
+
+            return (
+
+              <Droppable
+                droppableId={column}
+                key={column}
+              >
+
+                {(provided) => (
+
+                  <div
+                    ref={
+                      provided.innerRef
+                    }
+
+                    {...provided.droppableProps}
+                  >
+
+                    <KanbanColumn
+                      title={column}
+                    >
+
+                      {columnTasks.map(
+                        (task, index) => (
+
+                          <Draggable
+
+  draggableId={
+    task.taskId
+  }
+
+  index={index}
+
+  key={
+    task.taskId
+  }
+
+  isDragDisabled={
+
+    !(
+      user?.role === "manager"
+      ||
+
+      user?.role === "admin"
+
+      ||
+
+      (
+
+        task.assigneeName
+          ?.toLowerCase()
+          .trim()
+
+        ===
+
+        user?.name
+          ?.toLowerCase()
+          .trim()
+
+      )
+
+    )
+
+  }
+
+>
+
+                            {(provided) => (
+
+                              <div
+                                ref={
+                                  provided.innerRef
+                                }
+
+                                {...provided.draggableProps}
+
+                                {...provided.dragHandleProps}
+                              >
+
+                                <TaskCard
+  task={{
+    ...task,
+
+    canDrag:
+
+      (
+        user?.role === "manager"
+        ||
+
+        user?.role === "admin"
+      )
+
+      ||
+
+      (
+
+        task.assigneeName
+          ?.toLowerCase()
+          .trim()
+
+        ===
+
+        user?.name
+          ?.toLowerCase()
+          .trim()
+
+      ),
+
+  }}
+
+  onClick={() =>
+    setSelectedTask(task)
+  }
+/>
+
+                              </div>
+
+                            )}
+
+                          </Draggable>
+
+                        )
+                      )}
+
+                      {
+                        provided.placeholder
+                      }
+
+                    </KanbanColumn>
+
+                  </div>
+
+                )}
+
+              </Droppable>
+
+            );
+
+          })}
+
+        </div>
+
+      </DragDropContext>
 
       <TaskDetailModal
         open={!!selectedTask}
@@ -362,5 +792,7 @@ export default function Board() {
       />
 
     </div>
+
   );
+
 }

@@ -1,24 +1,73 @@
 function TaskCard({ task, onClick }) {
 
+  const deadlineDate =
+    new Date(task.deadline);
+
+  const today =
+    new Date();
+
+  const diffTime =
+    deadlineDate - today;
+
+  const diffDays =
+    Math.ceil(
+      diffTime /
+      (1000 * 60 * 60 * 24)
+    );
+
   const isOverdue =
-    new Date(task.deadline) < new Date();
+    diffDays < 0;
+
+  const isDueSoon =
+    diffDays >= 0 &&
+    diffDays <= 3;
+
+  let deadlineStyles =
+    "bg-green-100 text-green-700 border-green-300";
+
+  let deadlineText =
+    "On Track";
+
+  if (isOverdue) {
+
+    deadlineStyles =
+      "bg-red-100 text-red-700 border-red-300";
+
+    deadlineText =
+      "Overdue";
+
+  }
+  else if (isDueSoon) {
+
+    deadlineStyles =
+      "bg-yellow-100 text-yellow-700 border-yellow-300";
+
+    deadlineText =
+      "Due Soon";
+
+  }
 
   return (
+
     <div
-      draggable
-      onDragStart={(e) =>
-        e.dataTransfer.setData(
-          "taskId",
-          task.taskId
-        )
-      }
-      onClick={onClick}
-      className={`rounded-2xl p-4 shadow-md border cursor-grab bg-white transition hover:shadow-xl ${
-        isOverdue
-          ? "border-red-500"
-          : "border-gray-200"
-      }`}
+
+  draggable={task.canDrag}
+
+  onClick={onClick}
+      className={`
+        rounded-2xl p-4 shadow-md
+        border cursor-grab bg-white
+        transition hover:shadow-xl
+        ${
+          isOverdue
+            ? "border-red-500"
+            : isDueSoon
+            ? "border-yellow-400"
+            : "border-gray-200"
+        }
+      `}
     >
+
       <h3 className="text-lg font-bold mb-2">
         {task.title}
       </h3>
@@ -47,18 +96,44 @@ function TaskCard({ task, onClick }) {
 
       </div>
 
-      <div className="mt-3 text-xs text-gray-500">
-        Deadline: {task.deadline}
+      <div className="mt-3 text-sm text-gray-500">
+        Team: {task.teamName}
       </div>
 
-      {isOverdue && (
-        <p className="text-red-500 text-xs mt-2 font-semibold">
-          Overdue
+      <div className="text-sm text-gray-500">
+        Assignee: {task.assigneeName}
+      </div>
+
+      <div
+        className={`
+          mt-4 rounded-xl border px-3 py-2
+          text-xs font-semibold
+          ${deadlineStyles}
+        `}
+      >
+
+        <div className="flex items-center justify-between">
+
+          <span>
+            Deadline:
+          </span>
+
+          <span>
+            {task.deadline}
+          </span>
+
+        </div>
+
+        <p className="mt-1">
+          {deadlineText}
         </p>
-      )}
+
+      </div>
 
     </div>
+
   );
+
 }
 
 export default TaskCard;
