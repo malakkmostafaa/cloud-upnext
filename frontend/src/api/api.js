@@ -2,7 +2,7 @@ import axios from "axios";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000",
 });
 
 api.interceptors.request.use(async (config) => {

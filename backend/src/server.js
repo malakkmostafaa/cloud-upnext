@@ -6,9 +6,8 @@ import cors from "cors";
 
 import usersRoutes from "./routes/users.routes.js";
 import teamsRoutes from "./routes/teams.routes.js";
-import tasksRoutes from "./routes/tasks.routes.js";
-import authRoutes from "./routes/auth.routes.js";
 import projectsRoutes from "./routes/projects.routes.js";
+import tasksRoutes from "./routes/tasks.routes.js";
 
 
 
@@ -16,7 +15,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -27,7 +25,15 @@ app.use("/api", usersRoutes);
 app.use("/api", teamsRoutes);
 app.use("/api", projectsRoutes);
 app.use("/api", tasksRoutes);
-app.use("/api/auth", authRoutes);
+
+// Global error handler — returns ApiError details for the frontend.
+app.use((err, req, res, next) => {
+  console.error("Global error:", err);
+  res.status(err.statusCode || 500).json({
+    message: err.message || "Internal server error",
+    ...(err.details ? { details: err.details } : {}),
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
