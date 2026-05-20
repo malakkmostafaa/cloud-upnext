@@ -7,6 +7,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext";
 import React from "react";
+import { Toaster } from "react-hot-toast";
 
 Amplify.configure({
   Auth: {
@@ -22,7 +23,10 @@ createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+       <>
+  <App />
+  <Toaster position="top-right" />
+</>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

@@ -6,6 +6,8 @@ import cors from "cors";
 
 import usersRoutes from "./routes/users.routes.js";
 import teamsRoutes from "./routes/teams.routes.js";
+import tasksRoutes from "./routes/tasks.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 import projectsRoutes from "./routes/projects.routes.js";
 
 
@@ -14,6 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -23,6 +26,8 @@ app.get("/", (req, res) => {
 app.use("/api", usersRoutes);
 app.use("/api", teamsRoutes);
 app.use("/api", projectsRoutes);
+app.use("/api", tasksRoutes);
+app.use("/api/auth", authRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
