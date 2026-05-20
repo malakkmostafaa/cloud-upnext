@@ -1,5 +1,5 @@
-const { ApiError } = require("./errors");
-const { TaskStatus, TaskPriority } = require("../config/constants");
+import { ApiError } from "./errors.js";
+import { TaskStatus, TaskPriority } from "../config/constants.js";
 
 function isNonEmptyString(v, max = Infinity) {
   return typeof v === "string" && v.trim().length > 0 && v.length <= max;
@@ -15,7 +15,7 @@ function isIsoDate(v) {
   return !Number.isNaN(d.getTime());
 }
 
-function validateProjectPayload(body, { partial = false } = {}) {
+export function validateProjectPayload(body, { partial = false } = {}) {
   const errors = [];
   const { name, description } = body || {};
 
@@ -43,7 +43,7 @@ function validateProjectPayload(body, { partial = false } = {}) {
   return result;
 }
 
-function validateTaskPayload(body) {
+export function validateTaskPayload(body) {
   const errors = [];
   const {
     title,
@@ -85,8 +85,4 @@ function validateTaskPayload(body) {
   };
 }
 
-module.exports = {
-  validateProjectPayload,
-  validateTaskPayload,
-  TaskStatus,
-};
+export { TaskStatus };

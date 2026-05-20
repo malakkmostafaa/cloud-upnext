@@ -1,11 +1,11 @@
-const { randomUUID } = require("crypto");
-const { PutCommand } = require("@aws-sdk/lib-dynamodb");
+import { randomUUID } from "crypto";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 
-const docClient = require("../db/dynamo");
-const { Tables } = require("../config/tables");
-const { TaskStatus } = require("../config/constants");
-const { ApiError } = require("../utils/errors");
-const { getProjectById } = require("./projects.service");
+import { docClient } from "../db/dynamo.js";
+import { Tables } from "../config/tables.js";
+import { TaskStatus } from "../config/constants.js";
+import { ApiError } from "../utils/errors.js";
+import { getProjectById } from "./projects.service.js";
 
 /**
  * Creates a task. Caller must have already validated the payload and
@@ -14,7 +14,7 @@ const { getProjectById } = require("./projects.service");
  * @param {object} input  - validated task fields
  * @param {string} createdBy - cognito sub of the manager creating the task
  */
-async function createTask(input, createdBy) {
+export async function createTask(input, createdBy) {
   const project = await getProjectById(input.projectId);
   if (!project) throw ApiError.badRequest("projectId does not reference an existing project");
 
@@ -52,5 +52,3 @@ async function createTask(input, createdBy) {
 
   return task;
 }
-
-module.exports = { createTask };

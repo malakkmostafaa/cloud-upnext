@@ -1,7 +1,27 @@
 import { useState } from "react";
 import { mockTasks } from "../data/mockData";
+import { useAuth } from "../context/AuthContext";
+import TaskCreateModal from "../components/tasks/TaskCreateModal";
 
 const columns = ["To Do", "In Progress", "In Review", "Done"];
+
+// Maps backend task status enum to the UI column label.
+// TODO(tasks-list-member): drop this once GET /api/tasks returns the column
+// labels directly or the board switches to enum-based columns.
+const STATUS_TO_COLUMN = {
+  TO_DO: "To Do",
+  IN_PROGRESS: "In Progress",
+  IN_REVIEW: "In Review",
+  DONE: "Done",
+};
+
+// Maps backend priority enum to the UI label that priorityClass() expects.
+const PRIORITY_LABEL = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  CRITICAL: "Critical",
+};
 
 function priorityClass(priority) {
   if (priority === "Critical") return "bg-red-100 text-red-700";
@@ -11,7 +31,11 @@ function priorityClass(priority) {
 }
 
 export default function Board() {
+  const { user } = useAuth();
+  const canCreateTask = user?.role === "MANAGER" || user?.role === "ADMIN";
+
   const [tasks, setTasks] = useState(mockTasks);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const moveTask = (taskId, nextStatus) => {
     setTasks((prev) =>
@@ -21,6 +45,23 @@ export default function Board() {
           : task
       )
     );
+  };
+
+  // When a task is created via the API, drop it into the local board so the
+  // manager sees instant feedback. Once the live GET /api/tasks endpoint lands
+  // the board will re-fetch and this becomes redundant.
+  const handleTaskCreated = (task) => {
+    setTasks((prev) => [
+      {
+        ...task,
+        status: STATUS_TO_COLUMN[task.status] ?? task.status,
+        priority: PRIORITY_LABEL[task.priority] ?? task.priority,
+        teamName: task.teamId,
+        assigneeName: task.assigneeId,
+        deadline: task.deadline?.slice(0, 10),
+      },
+      ...prev,
+    ]);
   };
 
   return (
@@ -33,10 +74,21 @@ export default function Board() {
           </p>
         </div>
 
-        <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-          New Task
-        </button>
+        {canCreateTask && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            New Task
+          </button>
+        )}
       </div>
+
+      <TaskCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={handleTaskCreated}
+      />
 
       <div className="grid gap-5 lg:grid-cols-4">
         {columns.map((column) => {

@@ -1,9 +1,9 @@
-const express = require("express");
+import express from "express";
 
-const { requireAuth, requireRole } = require("../middleware/auth");
-const { Role } = require("../config/constants");
-const { validateTaskPayload } = require("../utils/validate");
-const tasksService = require("../services/tasks.service");
+import { requireAuth } from "../middleware/requireAuth.js";
+import { requireManager } from "../middleware/requireManager.js";
+import { validateTaskPayload } from "../utils/validate.js";
+import { createTask } from "../services/tasks.service.js";
 
 const router = express.Router();
 
@@ -12,11 +12,11 @@ const router = express.Router();
 router.post(
   "/tasks",
   requireAuth,
-  requireRole(Role.MANAGER),
+  requireManager,
   async (req, res, next) => {
     try {
       const payload = validateTaskPayload(req.body);
-      const task = await tasksService.createTask(payload, req.user.sub);
+      const task = await createTask(payload, req.user.userId);
       res.status(201).json(task);
     } catch (err) {
       next(err);
@@ -24,4 +24,4 @@ router.post(
   }
 );
 
-module.exports = router;
+export default router;
