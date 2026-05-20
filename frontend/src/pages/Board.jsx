@@ -1,5 +1,7 @@
-import { useState } from "react";
-
+import {
+  useState,
+  useEffect,
+} from "react";
 import toast from "react-hot-toast";
 
 import { useAuth }
@@ -45,8 +47,7 @@ export default function Board() {
   const [createOpen, setCreateOpen] =
     useState(false);
 
-  const [selectedTeam, setSelectedTeam] =
-    useState("All");
+  
 
   /**
    * LOAD TASKS
@@ -82,7 +83,13 @@ export default function Board() {
         const data =
           await response.json();
 
-        setTasks(data);
+        setTasks(
+
+  Array.isArray(data)
+    ? data
+    : []
+
+);
 
       } catch (error) {
 
@@ -99,29 +106,9 @@ export default function Board() {
 
   }, []);
 
-  const columns = [
+  
 
-    "To Do",
-    "In Progress",
-    "In Review",
-    "Done",
-
-  ];
-
-  const teams = [
-
-    "All",
-
-    ...new Set(
-
-      tasks.map(
-        (task) =>
-          task.teamName
-      )
-
-    ),
-
-  ];
+ 
 
   /**
    * CREATE TASK
@@ -163,8 +150,23 @@ export default function Board() {
           }
         );
 
-      const savedTask =
-        await response.json();
+      const data =
+  await response.json();
+
+console.log(
+  "CREATE RESPONSE:",
+  data
+);
+
+if (!response.ok) {
+
+  throw new Error(
+    data.message
+  );
+
+}
+
+const savedTask = data;
 
       setTasks((prev) => [
 
@@ -237,8 +239,23 @@ export default function Board() {
 
         );
 
-      const savedTask =
-        await response.json();
+     const data =
+  await response.json();
+
+console.log(
+  "CREATE RESPONSE:",
+  data
+);
+
+if (!response.ok) {
+
+  throw new Error(
+    data.message
+  );
+
+}
+
+const savedTask = data;
 
       setTasks((prev) =>
 
@@ -379,46 +396,7 @@ export default function Board() {
 
         <div className="flex items-center gap-4">
 
-          {(
-            user?.role === "manager"
-            ||
-
-            user?.role === "admin"
-          ) && (
-
-            <select
-              value={selectedTeam}
-
-              onChange={(e) =>
-                setSelectedTeam(
-                  e.target.value
-                )
-              }
-
-              className="
-                rounded-2xl border
-                border-slate-200
-                bg-white px-4 py-4
-                text-sm font-medium
-                text-slate-700
-                outline-none
-              "
-            >
-
-              {teams.map((team) => (
-
-                <option
-                  key={team}
-                  value={team}
-                >
-                  {team}
-                </option>
-
-              ))}
-
-            </select>
-
-          )}
+         
 
           {(
             user?.role === "manager"
@@ -449,9 +427,7 @@ export default function Board() {
 
         </div>
 
-        <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-          New Task
-        </button>
+        
       </div>
 
       <DragDropContext
@@ -590,39 +566,28 @@ try {
 
                 const matchesTeam =
 
-                  (
-                    user?.role === "manager"
-                    ||
+  (
+    user?.role === "manager"
+    ||
 
-                    user?.role === "admin"
-                  )
+    user?.role === "admin"
+  )
 
-                    ? (
+    ? true
 
-                        selectedTeam === "All"
-                        ||
+    : (
 
-                        task.teamName
-                          ?.toLowerCase()
-                          .trim() ===
+        task.teamName
+          ?.toLowerCase()
+          .trim()
 
-                        selectedTeam
-                          ?.toLowerCase()
-                          .trim()
+        ===
 
-                      )
+        user?.team
+          ?.toLowerCase()
+          .trim()
 
-                    : (
-
-                        task.teamName
-                          ?.toLowerCase()
-                          .trim() ===
-
-                        user?.team
-                          ?.toLowerCase()
-                          .trim()
-
-                      );
+      );
 
                 return (
                   matchesStatus
