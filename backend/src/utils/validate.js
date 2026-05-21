@@ -112,3 +112,83 @@ export function validateTaskPayload(body) {
     imageResizedKey: imageResizedKey ?? "",
   };
 }
+
+/**
+ * Validates a task EDIT payload. Every field is optional; only the supplied
+ * fields are returned, normalized. Throws ApiError(400) on any invalid field.
+ */
+export function validateTaskUpdatePayload(body) {
+  const errors = [];
+  const b = body || {};
+  const patch = {};
+
+  if (b.title !== undefined) {
+    if (!isNonEmptyString(b.title, 200)) {
+      errors.push("title must be a non-empty string up to 200 chars");
+    } else {
+      patch.title = b.title.trim();
+    }
+  }
+
+  if (b.description !== undefined) {
+    if (!isOptionalString(b.description, 5000)) {
+      errors.push("description must be a string up to 5000 chars");
+    } else {
+      patch.description = b.description ?? null;
+    }
+  }
+
+  if (b.priority !== undefined) {
+    if (!Object.values(TaskPriority).includes(b.priority)) {
+      errors.push(`priority must be one of ${Object.values(TaskPriority).join(", ")}`);
+    } else {
+      patch.priority = b.priority;
+    }
+  }
+
+  if (b.status !== undefined) {
+    if (!Object.values(TaskStatus).includes(b.status)) {
+      errors.push(`status must be one of ${Object.values(TaskStatus).join(", ")}`);
+    } else {
+      patch.status = b.status;
+    }
+  }
+
+  if (b.deadline !== undefined) {
+    if (!isIsoDate(b.deadline)) {
+      errors.push("deadline must be a valid ISO date string");
+    } else {
+      patch.deadline = new Date(b.deadline).toISOString();
+    }
+  }
+
+  if (b.assigneeId !== undefined) {
+    if (!isNonEmptyString(b.assigneeId)) {
+      errors.push("assigneeId must be a non-empty string");
+    } else {
+      patch.assigneeId = b.assigneeId;
+    }
+  }
+
+  if (b.teamId !== undefined) {
+    if (!isNonEmptyString(b.teamId)) {
+      errors.push("teamId must be a non-empty string");
+    } else {
+      patch.teamId = b.teamId;
+    }
+  }
+
+  if (b.projectId !== undefined) {
+    if (!isNonEmptyString(b.projectId)) {
+      errors.push("projectId must be a non-empty string");
+    } else {
+      patch.projectId = b.projectId;
+    }
+  }
+
+  if (errors.length) throw ApiError.badRequest("Invalid task update payload", errors);
+
+  return patch;
+}
+
+export { TaskStatus };
