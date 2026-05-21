@@ -1,16 +1,14 @@
-import { Amplify } from "aws-amplify";
-import { cognitoConfig } from "./config/cognito";
-
-// TEMP DEBUG — remove once Cognito works
-console.log("Cognito config:", cognitoConfig);
-console.log("All VITE env:", import.meta.env);
+/* eslint-disable no-unused-vars */
+import React from "react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { Amplify } from "aws-amplify";
+
 import "./index.css";
 import App from "./App.jsx";
-import { AuthProvider } from "./context/AuthContext";
-import React from "react";
+import { AuthProvider } from "./context/AuthContext.jsx";
+import { cognitoConfig } from "./config/cognito.js";
 
 Amplify.configure({
   Auth: {
@@ -21,12 +19,13 @@ Amplify.configure({
   },
 });
 
+
 createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
+  <StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <App />
       </AuthProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  </StrictMode>
 );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
+import api from "../api/api";
 
 const selectStyles = {
   control: (base, state) => ({
@@ -84,7 +85,6 @@ export default function UsersTeams() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   const userOptions = useMemo(() => {
     return users
@@ -105,134 +105,120 @@ export default function UsersTeams() {
   }, [teams]);
 
   async function loadData() {
-    try {
-      setError("");
-      setLoading(true);
+  try {
+    setError("");
+    setLoading(true);
 
-      const token = localStorage.getItem("idToken");
+    const [usersResponse, teamsResponse] = await Promise.all([
+      api.get("/users"),
+      api.get("/teams"),
+    ]);
 
-      const [usersResponse, teamsResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/users`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${apiBaseUrl}/api/teams`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+    const usersData = usersResponse.data.users || usersResponse.data;
+    const teamsData = teamsResponse.data.teams || teamsResponse.data;
 
-      if (!usersResponse.ok) throw new Error("Failed to load users.");
-      if (!teamsResponse.ok) throw new Error("Failed to load teams.");
-
-      setUsers(await usersResponse.json());
-      setTeams(await teamsResponse.json());
-    } catch (err) {
-      setError(err.message || "Something went wrong while loading data.");
-    } finally {
-      setLoading(false);
-    }
+    setUsers(Array.isArray(usersData) ? usersData : []);
+    setTeams(Array.isArray(teamsData) ? teamsData : []);
+  } catch (err) {
+    console.error("Failed to load users/teams:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while loading data."
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
   async function handleCreateTeam(e) {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!teamName.trim()) {
-      setError("Team name is required.");
-      return;
-    }
-
-    try {
-      setError("");
-      setSuccess("");
-      setCreating(true);
-
-      const token = localStorage.getItem("idToken");
-
-      const response = await fetch(`${apiBaseUrl}/api/teams`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: teamName }),
-      });
-
-      if (!response.ok) throw new Error("Failed to create team.");
-
-      setTeamName("");
-      setSuccess("Team created successfully.");
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Something went wrong while creating team.");
-    } finally {
-      setCreating(false);
-    }
+  if (!teamName.trim()) {
+    setError("Team name is required.");
+    return;
   }
 
-  async function handleAssignUserToTeam(e) {
-    e.preventDefault();
+  try {
+    setError("");
+    setSuccess("");
+    setCreating(true);
 
-    if (!selectedUser || !selectedTeam) {
-      setError("Please select an employee and a team.");
-      return;
-    }
+    await api.post("/teams", {
+      name: teamName,
+    });
 
-    const selectedUserObject = users.find(
-      (user) => (user.userId || user.email) === selectedUser
+    setTeamName("");
+    setSuccess("Team created successfully.");
+    await loadData();
+  } catch (err) {
+    console.error("Failed to create team:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while creating team."
     );
-
-    if (!selectedUserObject) {
-      setError("Selected user was not found.");
-      return;
-    }
-
-    if (selectedUserObject.role !== "EMPLOYEE") {
-      setError("Only employees can be assigned to teams.");
-      return;
-    }
-
-    const team = teams.find((t) => t.teamId === selectedTeam);
-
-    if (!team) {
-      setError("Selected team was not found.");
-      return;
-    }
-
-    try {
-      setError("");
-      setSuccess("");
-      setAssigning(true);
-
-      const token = localStorage.getItem("idToken");
-
-      const response = await fetch(
-        `${apiBaseUrl}/api/users/${encodeURIComponent(selectedUser)}/team`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            teamId: team.teamId,
-            teamName: team.name,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to assign user to team.");
-
-      setSelectedUser("");
-      setSelectedTeam("");
-      setSuccess("User assigned to team successfully.");
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Something went wrong while assigning user.");
-    } finally {
-      setAssigning(false);
-    }
+  } finally {
+    setCreating(false);
   }
+}
+async function handleAssignUserToTeam(e) {
+  e.preventDefault();
+
+  if (!selectedUser || !selectedTeam) {
+    setError("Please select an employee and a team.");
+    return;
+  }
+
+  const selectedUserObject = users.find(
+    (user) => (user.userId || user.email) === selectedUser
+  );
+
+  if (!selectedUserObject) {
+    setError("Selected user was not found.");
+    return;
+  }
+
+  if (selectedUserObject.role !== "EMPLOYEE") {
+    setError("Only employees can be assigned to teams.");
+    return;
+  }
+
+  const team = teams.find((t) => t.teamId === selectedTeam);
+
+  if (!team) {
+    setError("Selected team was not found.");
+    return;
+  }
+
+  try {
+    setError("");
+    setSuccess("");
+    setAssigning(true);
+
+    await api.put(`/users/${encodeURIComponent(selectedUser)}/team`, {
+      teamId: team.teamId,
+      teamName: team.name,
+    });
+
+    setSelectedUser("");
+    setSelectedTeam("");
+    setSuccess("User assigned to team successfully.");
+    await loadData();
+  } catch (err) {
+    console.error("Failed to assign user to team:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while assigning user."
+    );
+  } finally {
+    setAssigning(false);
+  }
+}
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 

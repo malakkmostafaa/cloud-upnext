@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import {
   signIn,
   fetchAuthSession,
@@ -8,9 +7,12 @@ import {
   signOut,
 } from "aws-amplify/auth";
 
+import { useAuth } from "../context/AuthContext";
+import api from "../api/api";
+
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
 
   const [email, setEmail] = useState("ali@upnext.com");
   const [password, setPassword] = useState("Password123!");
@@ -23,10 +25,15 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await signOut();
+      // Clear any previous Cognito session before signing in.
+      try {
+        await signOut();
+      } catch {
+        // Ignore if no user was signed in.
+      }
 
       const signInResult = await signIn({
-        username: email,
+        username: email.trim(),
         password,
       });
 
@@ -51,26 +58,46 @@ export default function Login() {
         throw new Error("No ID token returned from Cognito.");
       }
 
-      localStorage.setItem("idToken", idToken);
+      /**
+       * Optional backend verification.
+       * This proves the backend accepts the Cognito ID token.
+       * Your api client automatically attaches Authorization: Bearer <idToken>.
+       */
+            let backendUser = null;
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/me`,
-        {
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-          },
+      try {
+        const meResponse = await api.get("/me");
+        backendUser = meResponse.data.user || meResponse.data;
+      } catch (backendError) {
+        if (backendError.response?.status === 404) {
+          throw new Error(
+            "Backend route /api/me was not found. Add me.routes.js or remove this verification call.",
+            { cause: backendError }
+          );
         }
-      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Backend rejected the Cognito token.");
+        if (backendError.response?.status === 401) {
+          throw new Error("Backend rejected the Cognito token.", {
+            cause: backendError,
+          });
+        }
+
+        throw new Error(
+          backendError.response?.data?.message ||
+            backendError.message ||
+            "Backend verification failed.",
+          { cause: backendError }
+        );
       }
 
-      const user = await response.json();
-      login(user, idToken);
+      /**
+       * Refresh AuthContext from Cognito attributes.
+       * This keeps frontend role/team data aligned with backend requireAuth.
+       */
+      const authUser = await refreshUser();
+      const finalUser = authUser || backendUser;
 
-      if (user.role === "EMPLOYEE") {
+      if (finalUser?.role === "EMPLOYEE") {
         navigate("/board");
       } else {
         navigate("/dashboard");
@@ -107,6 +134,7 @@ export default function Login() {
               <p className="text-sm font-semibold text-slate-900">
                 Demo users
               </p>
+
               <div className="mt-3 space-y-1 text-sm text-slate-500">
                 <p>admin@upnext.com — Admin</p>
                 <p>ali@upnext.com — Manager</p>
@@ -119,10 +147,14 @@ export default function Login() {
 
         <div className="p-8 lg:p-12">
           <div className="mb-8">
-            <p className="text-sm font-semibold text-[#159c96]">Welcome back</p>
+            <p className="text-sm font-semibold text-[#159c96]">
+              Welcome back
+            </p>
+
             <h2 className="mt-2 text-3xl font-bold text-slate-950">
               Sign in
             </h2>
+
             <p className="mt-2 text-sm text-slate-500">
               Access your team workspace.
             </p>
@@ -139,11 +171,13 @@ export default function Login() {
               <label className="mb-1 block text-sm font-semibold text-slate-700">
                 Email
               </label>
+
               <input
                 className="w-full rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 outline-none focus:border-[#22b8b0]"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ali@upnext.com"
+                autoComplete="email"
               />
             </div>
 
@@ -151,12 +185,14 @@ export default function Login() {
               <label className="mb-1 block text-sm font-semibold text-slate-700">
                 Password
               </label>
+
               <input
                 className="w-full rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 outline-none focus:border-[#22b8b0]"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password123!"
+                autoComplete="current-password"
               />
             </div>
 

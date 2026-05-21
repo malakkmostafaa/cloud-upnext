@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { useAuth } from "../context/AuthContext";
+import api from "../api/api";
 
 const selectStyles = {
   control: (base, state) => ({
@@ -88,108 +89,85 @@ export default function Projects() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   async function loadProjects() {
-    try {
-      setError("");
-      setLoading(true);
+  try {
+    setError("");
+    setLoading(true);
 
-      const token = localStorage.getItem("idToken");
+    const response = await api.get("/projects");
 
-      const response = await fetch(`${apiBaseUrl}/api/projects`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    const data = response.data.projects || response.data;
+    setProjects(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Failed to load projects:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while loading projects."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+ async function handleSaveProject(e) {
+  e.preventDefault();
 
-      if (!response.ok) {
-        throw new Error("Failed to load projects.");
-      }
+  if (!canManageProjects) return;
 
-      const data = await response.json();
-      setProjects(data);
-    } catch (err) {
-      setError(err.message || "Something went wrong while loading projects.");
-    } finally {
-      setLoading(false);
-    }
+  if (!name.trim()) {
+    setError("Project name is required.");
+    return;
   }
 
-  async function handleSaveProject(e) {
-    e.preventDefault();
+  try {
+    setError("");
+    setSaving(true);
 
-    if (!canManageProjects) return;
+    const payload = {
+      name,
+      description,
+      teamId,
+    };
 
-    if (!name.trim()) {
-      setError("Project name is required.");
-      return;
+    if (editingProjectId) {
+      await api.put(`/projects/${editingProjectId}`, payload);
+    } else {
+      await api.post("/projects", payload);
     }
 
-    try {
-      setError("");
-      setSaving(true);
-
-      const token = localStorage.getItem("idToken");
-
-      const url = editingProjectId
-        ? `${apiBaseUrl}/api/projects/${editingProjectId}`
-        : `${apiBaseUrl}/api/projects`;
-
-      const method = editingProjectId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          description,
-          teamId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          editingProjectId ? "Failed to update project." : "Failed to create project."
-        );
-      }
-
-      resetForm();
-      await loadProjects();
-    } catch (err) {
-      setError(err.message || "Something went wrong while saving project.");
-    } finally {
-      setSaving(false);
-    }
+    resetForm();
+    await loadProjects();
+  } catch (err) {
+    console.error("Failed to save project:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while saving project."
+    );
+  } finally {
+    setSaving(false);
   }
+}
 
-  async function handleDeleteProject(projectId) {
-    if (!canManageProjects) return;
+ async function handleDeleteProject(projectId) {
+  if (!canManageProjects) return;
 
-    try {
-      setError("");
+  try {
+    setError("");
 
-      const token = localStorage.getItem("idToken");
+    await api.delete(`/projects/${projectId}`);
 
-      const response = await fetch(`${apiBaseUrl}/api/projects/${projectId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete project.");
-      }
-
-      await loadProjects();
-    } catch (err) {
-      setError(err.message || "Something went wrong while deleting project.");
-    }
+    await loadProjects();
+  } catch (err) {
+    console.error("Failed to delete project:", err);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Something went wrong while deleting project."
+    );
   }
+}
 
   function handleEditClick(project) {
     setEditingProjectId(project.projectId);
@@ -216,6 +194,7 @@ export default function Projects() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProjects();
   }, []);
 
