@@ -1,9 +1,15 @@
 import { randomUUID } from "crypto";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb";
 
 import { docClient } from "../db/dynamo.js";
-import { Tables } from "../config/tables.js";
-import { TaskStatus } from "../config/constants.js";
+import { Tables, TaskIndexes } from "../config/tables.js";
+import { TaskStatus, Role } from "../config/constants.js";
 import { ApiError } from "../utils/errors.js";
 import { getProjectById } from "./projects.service.js";
 import { publishTaskAssignedEvent } from "./notifications.service.js";
@@ -114,4 +120,119 @@ export async function createTask(input, createdBy) {
     ...task,
     notification,
   };
+}
+
+async function queryTasksByTeam(teamId) {
+  const result = await docClient.send(
+    new QueryCommand({
+      TableName: Tables.TASKS,
+      IndexName: TaskIndexes.BY_TEAM,
+      KeyConditionExpression: "teamId = :teamId",
+      ExpressionAttributeValues: { ":teamId": teamId },
+    })
+  );
+
+  return result.Items || [];
+}
+
+/**
+ * Lists tasks with server-side team isolation.
+ *
+ * - Managers/admins see every task, or one team's tasks when `filterTeamId`
+ *   is supplied (TASK-03, TASK-04).
+ * - Employees are hard-scoped to their own team. Any `filterTeamId` is ignored
+ *   so they cannot read another team's tasks (TASK-05).
+ *
+ * @param {{ role: string, teamId?: string, filterTeamId?: string }} args
+ * @returns {Promise<object[]>}
+ */
+export async function listTasks({ role, teamId, filterTeamId }) {
+  const isManager = role === Role.MANAGER || role === Role.ADMIN;
+
+  if (!isManager) {
+    if (!teamId) return [];
+    return queryTasksByTeam(teamId);
+  }
+
+  if (filterTeamId) {
+    return queryTasksByTeam(filterTeamId);
+  }
+
+  const result = await docClient.send(
+    new ScanCommand({ TableName: Tables.TASKS })
+  );
+
+  return result.Items || [];
+}
+
+/**
+ * Updates a task. Caller must have validated the payload and authorized the
+ * request (manager-only). A status change is appended to `statusHistory`.
+ *
+ * @param {string} taskId
+ * @param {object} patch - validated subset of mutable task fields
+ * @param {string} actor - Cognito sub of the user making the change
+ * @returns {Promise<object>} the updated task
+ */
+export async function updateTask(taskId, patch, actor) {
+  const current = await getTaskById(taskId);
+
+  if (!current) {
+    throw ApiError.notFound("Task not found");
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return current;
+  }
+
+  if (patch.projectId && patch.projectId !== current.projectId) {
+    const project = await getProjectById(patch.projectId);
+
+    if (!project) {
+      throw ApiError.badRequest("projectId does not reference an existing project");
+    }
+  }
+
+  const now = new Date().toISOString();
+  const updated = { ...current, ...patch, updatedAt: now };
+
+  if (patch.status && patch.status !== current.status) {
+    updated.statusHistory = [
+      ...(current.statusHistory || []),
+      { status: patch.status, by: actor, at: now },
+    ];
+  }
+
+  await docClient.send(
+    new PutCommand({
+      TableName: Tables.TASKS,
+      Item: updated,
+      ConditionExpression: "attribute_exists(taskId)",
+    })
+  );
+
+  return updated;
+}
+
+/**
+ * Permanently deletes a task.
+ *
+ * @param {string} taskId
+ */
+export async function deleteTask(taskId) {
+  try {
+    await docClient.send(
+      new DeleteCommand({
+        TableName: Tables.TASKS,
+        Key: { taskId },
+        ConditionExpression: "attribute_exists(taskId)",
+      })
+    );
+  } catch (error) {
+    if (error.name === "ConditionalCheckFailedException") {
+      throw ApiError.notFound("Task not found");
+    }
+
+    throw error;
+  }
 }
