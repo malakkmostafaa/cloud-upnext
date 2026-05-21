@@ -1,29 +1,27 @@
-const commentsRoutes = require("./routes/comments.routes");
-const imagesRoutes = require("./routes/images.routes");
-const projectsRoutes = require("./routes/projects.routes");
-const tasksRoutes = require("./routes/tasks.routes");
-const devAuth = require("./middleware/devAuth");
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
 
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const morgan = require("morgan");
+import commentsRoutes from "./routes/comments.routes.js";
+import imagesRoutes from "./routes/images.routes.js";
+import projectsRoutes from "./routes/projects.routes.js";
+import tasksRoutes from "./routes/tasks.routes.js";
+import teamsRoutes from "./routes/teams.routes.js";
+import usersRoutes from "./routes/users.routes.js";
+import analyticsRoutes from "./routes/analytics.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
 
-// Middlewares
+// Global middlewares
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
-// Dev-only auth stub. Remove once the Cognito JWT verifier middleware is wired.
-if (process.env.NODE_ENV !== "production") {
-  app.use(devAuth);
-}
-
-// Health check route
+// Health check route - public
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -32,17 +30,26 @@ app.get("/health", (req, res) => {
   });
 });
 
-// API test route
+// API test route - public
 app.get("/api", (req, res) => {
   res.json({
     message: "Welcome to UpNext API",
   });
 });
 
+// Public auth routes
+// Example: login/signup routes if your team implemented them here
+app.use("/api", authRoutes);
+
+// Protected routes
+// These should use requireAuth inside their own route files
 app.use("/api", projectsRoutes);
 app.use("/api", tasksRoutes);
 app.use("/api", commentsRoutes);
 app.use("/api", imagesRoutes);
+app.use("/api", teamsRoutes);
+app.use("/api", usersRoutes);
+app.use("/api", analyticsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -61,4 +68,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-module.exports = app;
+export default app;

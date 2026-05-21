@@ -45,6 +45,7 @@ export function validateProjectPayload(body, { partial = false } = {}) {
 
 export function validateTaskPayload(body) {
   const errors = [];
+
   const {
     title,
     description,
@@ -53,25 +54,51 @@ export function validateTaskPayload(body) {
     assigneeId,
     teamId,
     projectId,
-    imageKey,
+    imageOriginalKey,
+    imageResizedKey,
   } = body || {};
 
-  if (!isNonEmptyString(title, 200)) errors.push("title is required (1-200 chars)");
-  if (!isOptionalString(description, 5000))
+  if (!isNonEmptyString(title, 200)) {
+    errors.push("title is required (1-200 chars)");
+  }
+
+  if (!isOptionalString(description, 5000)) {
     errors.push("description must be a string up to 5000 chars");
+  }
 
-  if (!Object.values(TaskPriority).includes(priority))
-    errors.push(`priority must be one of ${Object.values(TaskPriority).join(", ")}`);
+  if (!Object.values(TaskPriority).includes(priority)) {
+    errors.push(
+      `priority must be one of ${Object.values(TaskPriority).join(", ")}`
+    );
+  }
 
-  if (!isIsoDate(deadline)) errors.push("deadline must be a valid ISO date string");
+  if (!isIsoDate(deadline)) {
+    errors.push("deadline must be a valid ISO date string");
+  }
 
-  if (!isNonEmptyString(assigneeId)) errors.push("assigneeId is required");
-  if (!isNonEmptyString(teamId)) errors.push("teamId is required");
-  if (!isNonEmptyString(projectId)) errors.push("projectId is required");
-  if (!isOptionalString(imageKey, 1024))
-    errors.push("imageKey must be a string up to 1024 chars");
+  if (!isNonEmptyString(assigneeId)) {
+    errors.push("assigneeId is required");
+  }
 
-  if (errors.length) throw ApiError.badRequest("Invalid task payload", errors);
+  if (!isNonEmptyString(teamId)) {
+    errors.push("teamId is required");
+  }
+
+  if (!isNonEmptyString(projectId)) {
+    errors.push("projectId is required");
+  }
+
+  if (!isOptionalString(imageOriginalKey, 1024)) {
+    errors.push("imageOriginalKey must be a string up to 1024 chars");
+  }
+
+  if (!isOptionalString(imageResizedKey, 1024)) {
+    errors.push("imageResizedKey must be a string up to 1024 chars");
+  }
+
+  if (errors.length) {
+    throw ApiError.badRequest("Invalid task payload", errors);
+  }
 
   return {
     title: title.trim(),
@@ -81,8 +108,7 @@ export function validateTaskPayload(body) {
     assigneeId,
     teamId,
     projectId,
-    imageKey: imageKey ?? null,
+    imageOriginalKey: imageOriginalKey ?? "",
+    imageResizedKey: imageResizedKey ?? "",
   };
 }
-
-export { TaskStatus };
