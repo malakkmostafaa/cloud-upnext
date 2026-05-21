@@ -1,16 +1,21 @@
-const express = require("express");
-const {
+import express from "express";
+
+import { requireAuth } from "../middleware/requireAuth.js";
+import {
   generateTaskImageUploadUrl,
   saveTaskImage,
   removeTaskImage,
-} = require("../services/images.service");
-const { getTaskById } = require("../services/tasks.service");
-const { canAccessTask } = require("../utils/taskAccess");
-const mockAuth = require("../middleware/mockAuth");
+} from "../services/images.service.js";
+import { getTaskById } from "../services/tasks.service.js";
+import { canAccessTask } from "../utils/canAccessTask.js";
 
 const router = express.Router();
 
-router.post("/tasks/:taskId/image-url", mockAuth, async (req, res, next) => {
+/**
+ * Step 1:
+ * Frontend asks backend for a presigned S3 upload URL.
+ */
+router.post("/tasks/:taskId/image-url", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = req.params;
     const { filename, contentType } = req.body;
@@ -35,7 +40,7 @@ router.post("/tasks/:taskId/image-url", mockAuth, async (req, res, next) => {
       contentType,
     });
 
-    res.json({
+    return res.json({
       message: "Upload URL generated successfully",
       ...result,
     });
@@ -44,7 +49,11 @@ router.post("/tasks/:taskId/image-url", mockAuth, async (req, res, next) => {
   }
 });
 
-router.patch("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
+/**
+ * Step 2:
+ * After frontend uploads to S3, it tells backend which S3 key was uploaded.
+ */
+router.patch("/tasks/:taskId/image", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = req.params;
     const { imageOriginalKey } = req.body;
@@ -68,8 +77,8 @@ router.patch("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
       imageOriginalKey,
     });
 
-    res.json({
-      message: "Task image updated successfully",
+    return res.json({
+      message: "Task image saved successfully",
       task: updatedTask,
     });
   } catch (error) {
@@ -77,7 +86,11 @@ router.patch("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
   }
 });
 
-router.delete("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
+/**
+ * Removes the image reference from the task.
+ * The old image key is kept in imageVersions for history.
+ */
+router.delete("/tasks/:taskId/image", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = req.params;
 
@@ -97,8 +110,8 @@ router.delete("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
 
     const updatedTask = await removeTaskImage(taskId);
 
-    res.json({
-      message: "Task image reference removed successfully. Previous image retained in S3 version history.",
+    return res.json({
+      message: "Task image reference removed successfully",
       task: updatedTask,
     });
   } catch (error) {
@@ -106,4 +119,4 @@ router.delete("/tasks/:taskId/image", mockAuth, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,42 +1,62 @@
-const { PutCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
-const { v4: uuidv4 } = require("uuid");
-const docClient = require("../db/dynamo");
+import { randomUUID } from "crypto";
+import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
-const COMMENTS_TABLE = process.env.COMMENTS_TABLE || "upnext-comments";
+import { docClient } from "../db/dynamo.js";
+import { Tables } from "../config/tables.js";
 
-async function createComment({ taskId, user, text }) {
+function createError(message, statusCode = 500) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+export async function createComment({ taskId, user, text }) {
+  if (!taskId) {
+    throw createError("taskId is required", 400);
+  }
+
+  if (!user || !user.userId) {
+    throw createError("Authenticated user is required", 401);
+  }
+
   if (!text || !text.trim()) {
-    const error = new Error("Comment text is required");
-    error.statusCode = 400;
-    throw error;
+    throw createError("Comment text is required", 400);
   }
 
   const now = new Date().toISOString();
 
   const comment = {
     taskId,
-    commentId: uuidv4(),
+    commentId: randomUUID(),
+
     authorId: user.userId,
-    authorName: user.name || user.email,
-    authorEmail: user.email,
+    authorName: user.name || user.email || "Unknown user",
+    authorEmail: user.email || "",
+
     text: text.trim(),
+
     createdAt: now,
   };
 
   await docClient.send(
     new PutCommand({
-      TableName: COMMENTS_TABLE,
+      TableName: Tables.COMMENTS,
       Item: comment,
+      ConditionExpression: "attribute_not_exists(commentId)",
     })
   );
 
   return comment;
 }
 
-async function getCommentsByTaskId(taskId) {
+export async function getCommentsByTaskId(taskId) {
+  if (!taskId) {
+    throw createError("taskId is required", 400);
+  }
+
   const result = await docClient.send(
     new QueryCommand({
-      TableName: COMMENTS_TABLE,
+      TableName: Tables.COMMENTS,
       KeyConditionExpression: "taskId = :taskId",
       ExpressionAttributeValues: {
         ":taskId": taskId,
@@ -47,8 +67,3 @@ async function getCommentsByTaskId(taskId) {
 
   return result.Items || [];
 }
-
-module.exports = {
-  createComment,
-  getCommentsByTaskId,
-};
