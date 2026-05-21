@@ -1,13 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Select from "react-select";
 import { mockTasks } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import TaskCreateModal from "../components/tasks/TaskCreateModal";
 
 const columns = ["To Do", "In Progress", "In Review", "Done"];
 
-// Maps backend task status enum to the UI column label.
-// TODO(tasks-list-member): drop this once GET /api/tasks returns the column
-// labels directly or the board switches to enum-based columns.
 const STATUS_TO_COLUMN = {
   TO_DO: "To Do",
   IN_PROGRESS: "In Progress",
@@ -15,7 +13,6 @@ const STATUS_TO_COLUMN = {
   DONE: "Done",
 };
 
-// Maps backend priority enum to the UI label that priorityClass() expects.
 const PRIORITY_LABEL = {
   LOW: "Low",
   MEDIUM: "Medium",
@@ -23,11 +20,117 @@ const PRIORITY_LABEL = {
   CRITICAL: "Critical",
 };
 
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: "48px",
+    borderRadius: "18px",
+    borderColor: state.isFocused ? "#22b8b0" : "#ccebed",
+    backgroundColor: "#f7fbfc",
+    boxShadow: state.isFocused ? "0 0 0 4px #dff7f5" : "none",
+    cursor: "pointer",
+    "&:hover": {
+      borderColor: "#22b8b0",
+    },
+  }),
+
+  menu: (base) => ({
+    ...base,
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #d9eef2",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+    zIndex: 50,
+  }),
+
+  menuList: (base) => ({
+    ...base,
+    padding: "6px",
+  }),
+
+  option: (base, state) => ({
+    ...base,
+    borderRadius: "12px",
+    backgroundColor: state.isSelected
+      ? "#22b8b0"
+      : state.isFocused
+        ? "#dff7f5"
+        : "white",
+    color: state.isSelected ? "white" : "#0f172a",
+    padding: "12px 14px",
+    cursor: "pointer",
+    fontSize: "14px",
+  }),
+
+  placeholder: (base) => ({
+    ...base,
+    color: "#64748b",
+    fontSize: "14px",
+  }),
+
+  singleValue: (base) => ({
+    ...base,
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 500,
+  }),
+
+  indicatorSeparator: () => ({
+    display: "none",
+  }),
+
+  dropdownIndicator: (base, state) => ({
+    ...base,
+    color: state.isFocused ? "#159c96" : "#94a3b8",
+    "&:hover": {
+      color: "#159c96",
+    },
+  }),
+};
+
+const smallSelectStyles = {
+  ...selectStyles,
+
+  control: (base, state) => ({
+    ...base,
+    minHeight: "42px",
+    borderRadius: "16px",
+    borderColor: state.isFocused ? "#22b8b0" : "#ccebed",
+    backgroundColor: "white",
+    boxShadow: state.isFocused ? "0 0 0 4px #dff7f5" : "none",
+    cursor: "pointer",
+    "&:hover": {
+      borderColor: "#22b8b0",
+    },
+  }),
+
+  option: (base, state) => ({
+    ...base,
+    borderRadius: "12px",
+    backgroundColor: state.isSelected
+      ? "#22b8b0"
+      : state.isFocused
+        ? "#dff7f5"
+        : "white",
+    color: state.isSelected ? "white" : "#0f172a",
+    padding: "10px 12px",
+    cursor: "pointer",
+    fontSize: "13px",
+  }),
+
+  singleValue: (base) => ({
+    ...base,
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 500,
+  }),
+};
+
 function priorityClass(priority) {
-  if (priority === "Critical") return "bg-red-100 text-red-700";
-  if (priority === "High") return "bg-orange-100 text-orange-700";
-  if (priority === "Medium") return "bg-yellow-100 text-yellow-700";
-  return "bg-slate-100 text-slate-700";
+  if (priority === "Critical") return "bg-red-50 text-red-600";
+  if (priority === "High") return "bg-orange-50 text-orange-600";
+  if (priority === "Medium") return "bg-yellow-50 text-yellow-700";
+  return "bg-[#dff7f5] text-[#159c96]";
 }
 
 export default function Board() {
@@ -36,8 +139,45 @@ export default function Board() {
 
   const [tasks, setTasks] = useState(mockTasks);
   const [createOpen, setCreateOpen] = useState(false);
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
-  const moveTask = (taskId, nextStatus) => {
+  const teams = useMemo(() => {
+    return ["all", ...new Set(tasks.map((task) => task.teamName).filter(Boolean))];
+  }, [tasks]);
+
+  const teamOptions = useMemo(() => {
+    return teams.map((team) => ({
+      value: team,
+      label: team === "all" ? "All teams" : team,
+    }));
+  }, [teams]);
+
+  const priorityOptions = [
+    { value: "all", label: "All priorities" },
+    { value: "Low", label: "Low" },
+    { value: "Medium", label: "Medium" },
+    { value: "High", label: "High" },
+    { value: "Critical", label: "Critical" },
+  ];
+
+  const statusOptions = columns.map((status) => ({
+    value: status,
+    label: status,
+  }));
+
+  const filteredTasks = tasks.filter((task) => {
+    const matchesTeam = teamFilter === "all" || task.teamName === teamFilter;
+    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
+    const matchesSearch =
+      task.title?.toLowerCase().includes(search.toLowerCase()) ||
+      task.description?.toLowerCase().includes(search.toLowerCase());
+
+    return matchesTeam && matchesPriority && matchesSearch;
+  });
+
+  function moveTask(taskId, nextStatus) {
     setTasks((prev) =>
       prev.map((task) =>
         task.taskId === taskId
@@ -45,12 +185,9 @@ export default function Board() {
           : task
       )
     );
-  };
+  }
 
-  // When a task is created via the API, drop it into the local board so the
-  // manager sees instant feedback. Once the live GET /api/tasks endpoint lands
-  // the board will re-fetch and this becomes redundant.
-  const handleTaskCreated = (task) => {
+  function handleTaskCreated(task) {
     setTasks((prev) => [
       {
         ...task,
@@ -62,13 +199,14 @@ export default function Board() {
       },
       ...prev,
     ]);
-  };
+  }
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-950">Task Board</h2>
+          <p className="text-sm font-semibold text-[#159c96]">Kanban</p>
+          <h2 className="mt-2 text-3xl font-bold text-slate-950">Task Board</h2>
           <p className="mt-2 text-slate-500">
             Track work across To Do, In Progress, In Review, and Done.
           </p>
@@ -77,7 +215,7 @@ export default function Board() {
         {canCreateTask && (
           <button
             onClick={() => setCreateOpen(true)}
-            className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            className="rounded-2xl bg-[#22b8b0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#159c96]"
           >
             New Task
           </button>
@@ -90,18 +228,43 @@ export default function Board() {
         onCreated={handleTaskCreated}
       />
 
+      <div className="mb-6 grid gap-3 rounded-3xl bg-white p-4 shadow-sm shadow-slate-200 md:grid-cols-3">
+        <input
+          className="rounded-2xl border border-[#ccebed] bg-[#f7fbfc] px-4 py-3 text-sm outline-none transition focus:border-[#22b8b0] focus:ring-4 focus:ring-[#dff7f5]"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search tasks..."
+        />
+
+        <Select
+          options={teamOptions}
+          value={teamOptions.find((option) => option.value === teamFilter)}
+          onChange={(option) => setTeamFilter(option?.value || "all")}
+          styles={selectStyles}
+          isSearchable={false}
+        />
+
+        <Select
+          options={priorityOptions}
+          value={priorityOptions.find((option) => option.value === priorityFilter)}
+          onChange={(option) => setPriorityFilter(option?.value || "all")}
+          styles={selectStyles}
+          isSearchable={false}
+        />
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-4">
         {columns.map((column) => {
-          const columnTasks = tasks.filter((task) => task.status === column);
+          const columnTasks = filteredTasks.filter((task) => task.status === column);
 
           return (
             <div
               key={column}
-              className="min-h-[600px] rounded-3xl border border-slate-200 bg-white p-4"
+              className="min-h-[600px] rounded-3xl bg-white p-4 shadow-sm shadow-slate-200"
             >
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-semibold text-slate-900">{column}</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                <h3 className="font-bold text-slate-900">{column}</h3>
+                <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
                   {columnTasks.length}
                 </span>
               </div>
@@ -113,14 +276,11 @@ export default function Board() {
                   </div>
                 ) : (
                   columnTasks.map((task) => (
-                    <div
-                      key={task.taskId}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
-                    >
+                    <div key={task.taskId} className="rounded-3xl bg-[#f7fbfc] p-4">
                       <div className="mb-3 flex items-start justify-between gap-3">
-                        <h4 className="font-semibold text-slate-950">{task.title}</h4>
+                        <h4 className="font-bold text-slate-950">{task.title}</h4>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${priorityClass(
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
                             task.priority
                           )}`}
                         >
@@ -132,23 +292,25 @@ export default function Board() {
                         {task.description}
                       </p>
 
-                      <div className="mt-4 space-y-1 text-xs text-slate-500">
+                      <div className="mt-4 space-y-1 text-xs text-slate-400">
                         <p>Team: {task.teamName}</p>
                         <p>Assignee: {task.assigneeName}</p>
                         <p>Deadline: {task.deadline}</p>
                       </div>
 
-                      <select
-                        className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                        value={task.status}
-                        onChange={(e) => moveTask(task.taskId, e.target.value)}
-                      >
-                        {columns.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="mt-4">
+                        <Select
+                          options={statusOptions}
+                          value={statusOptions.find(
+                            (option) => option.value === task.status
+                          )}
+                          onChange={(option) =>
+                            moveTask(task.taskId, option?.value || task.status)
+                          }
+                          styles={smallSelectStyles}
+                          isSearchable={false}
+                        />
+                      </div>
                     </div>
                   ))
                 )}

@@ -17,51 +17,42 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+  async function handleLogin(e) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    
 
     try {
       await signOut();
-      // 1. Login using Cognito
+
       const signInResult = await signIn({
         username: email,
         password,
       });
 
-
-      // 2. Handle temporary-password challenge
       if (
         signInResult.nextStep?.signInStep ===
         "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
       ) {
         await confirmSignIn({
-        challengeResponse: password,
-        options: {
-        userAttributes: {
-         name: email.split("@")[0],
-    },
-  },
-});
+          challengeResponse: password,
+          options: {
+            userAttributes: {
+              name: email.split("@")[0],
+            },
+          },
+        });
       }
 
-      // 3. Get Cognito session and ID token
       const session = await fetchAuthSession();
-
-
       const idToken = session.tokens?.idToken?.toString();
-      console.log("ID TOKEN:", idToken);
 
       if (!idToken) {
         throw new Error("No ID token returned from Cognito.");
       }
 
-      // 4. Save token for future API requests
       localStorage.setItem("idToken", idToken);
 
-      // 5. Ask backend who this user is
       const response = await fetch(
         `${import.meta.env.VITE_API_BASE_URL}/api/me`,
         {
@@ -72,17 +63,13 @@ export default function Login() {
       );
 
       if (!response.ok) {
-  const errorData = await response.json();
-  console.error("Backend auth error:", response.status, errorData);
-  throw new Error(errorData.error || "Backend rejected the Cognito token.");
-}
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Backend rejected the Cognito token.");
+      }
 
       const user = await response.json();
-
-      // 6. Save user in AuthContext
       login(user, idToken);
 
-      // 7. Redirect based on role
       if (user.role === "EMPLOYEE") {
         navigate("/board");
       } else {
@@ -90,73 +77,102 @@ export default function Login() {
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError(
-        err.message ||
-          "Login failed. Check your email, password, or Cognito setup."
-      );
+      setError(err.message || "Login failed.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-950">UpNext</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Sign in to manage your team tasks
-          </p>
+    <div className="flex min-h-screen items-center justify-center bg-[#eef6f8] px-4">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-white shadow-xl shadow-slate-200 lg:grid-cols-2">
+        <div className="hidden bg-[#dff7f5] p-10 lg:block">
+          <div className="flex h-full flex-col justify-between">
+            <div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#22b8b0] text-xl font-bold text-white">
+                U
+              </div>
+
+              <h1 className="mt-8 text-4xl font-bold text-slate-950">
+                UpNext
+              </h1>
+
+              <p className="mt-4 max-w-sm text-slate-500">
+                A lightweight cloud task-management platform powered by AWS
+                Cognito, DynamoDB, and server-side team isolation.
+              </p>
+            </div>
+
+            <div className="rounded-3xl bg-white/80 p-5">
+              <p className="text-sm font-semibold text-slate-900">
+                Demo users
+              </p>
+              <div className="mt-3 space-y-1 text-sm text-slate-500">
+                <p>admin@upnext.com — Admin</p>
+                <p>ali@upnext.com — Manager</p>
+                <p>sara@upnext.com — Frontend employee</p>
+                <p>omar@upnext.com — Backend employee</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Email
-            </label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ali@upnext.com"
-            />
+        <div className="p-8 lg:p-12">
+          <div className="mb-8">
+            <p className="text-sm font-semibold text-[#159c96]">Welcome back</p>
+            <h2 className="mt-2 text-3xl font-bold text-slate-950">
+              Sign in
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Access your team workspace.
+            </p>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Password
-            </label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password123!"
-            />
+          {error && (
+            <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700">
+                Email
+              </label>
+              <input
+                className="w-full rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 outline-none focus:border-[#22b8b0]"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ali@upnext.com"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-slate-700">
+                Password
+              </label>
+              <input
+                className="w-full rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 outline-none focus:border-[#22b8b0]"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password123!"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-2xl bg-[#22b8b0] px-4 py-3 font-semibold text-white hover:bg-[#159c96] disabled:opacity-60"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+
+          <div className="mt-6 rounded-3xl bg-[#f7fbfc] p-4 text-xs text-slate-500 lg:hidden">
+            <p className="font-semibold text-slate-700">Demo password:</p>
+            <p>Password123!</p>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-
-        <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">Demo users:</p>
-          <p>admin@upnext.com — Admin</p>
-          <p>ali@upnext.com — Manager</p>
-          <p>sara@upnext.com — Frontend employee</p>
-          <p>omar@upnext.com — Backend employee</p>
-          <p className="mt-2">Password for all: Password123!</p>
         </div>
       </div>
     </div>
