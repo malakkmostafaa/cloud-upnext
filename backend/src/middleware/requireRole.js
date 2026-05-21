@@ -4,6 +4,8 @@ export function requireRole(allowedRoles) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
+    const role = req.user.role?.toUpperCase();
+
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ message: "Access denied." });
     }
