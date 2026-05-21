@@ -1,4 +1,73 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Select from "react-select";
+
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: "52px",
+    borderRadius: "18px",
+    borderColor: state.isFocused ? "#22b8b0" : "#ccebed",
+    backgroundColor: "#f7fbfc",
+    boxShadow: state.isFocused ? "0 0 0 4px #dff7f5" : "none",
+    cursor: "pointer",
+    "&:hover": {
+      borderColor: "#22b8b0",
+    },
+  }),
+
+  menu: (base) => ({
+    ...base,
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #d9eef2",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+    zIndex: 50,
+  }),
+
+  menuList: (base) => ({
+    ...base,
+    padding: "6px",
+  }),
+
+  option: (base, state) => ({
+    ...base,
+    borderRadius: "12px",
+    backgroundColor: state.isSelected
+      ? "#22b8b0"
+      : state.isFocused
+        ? "#dff7f5"
+        : "white",
+    color: state.isSelected ? "white" : "#0f172a",
+    padding: "12px 14px",
+    cursor: "pointer",
+    fontSize: "14px",
+  }),
+
+  placeholder: (base) => ({
+    ...base,
+    color: "#64748b",
+    fontSize: "14px",
+  }),
+
+  singleValue: (base) => ({
+    ...base,
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 500,
+  }),
+
+  indicatorSeparator: () => ({
+    display: "none",
+  }),
+
+  dropdownIndicator: (base, state) => ({
+    ...base,
+    color: state.isFocused ? "#159c96" : "#94a3b8",
+    "&:hover": {
+      color: "#159c96",
+    },
+  }),
+};
 
 export default function UsersTeams() {
   const [users, setUsers] = useState([]);
@@ -17,6 +86,24 @@ export default function UsersTeams() {
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
+  const userOptions = useMemo(() => {
+    return users
+      .filter((user) => user.role === "EMPLOYEE")
+      .map((user) => ({
+        value: user.userId || user.email,
+        label: `${user.email || user.username} — ${
+          user.teamName || user.teamId || "No team"
+        }`,
+      }));
+  }, [users]);
+
+  const teamOptions = useMemo(() => {
+    return teams.map((team) => ({
+      value: team.teamId,
+      label: team.name,
+    }));
+  }, [teams]);
+
   async function loadData() {
     try {
       setError("");
@@ -26,33 +113,19 @@ export default function UsersTeams() {
 
       const [usersResponse, teamsResponse] = await Promise.all([
         fetch(`${apiBaseUrl}/api/users`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }),
-
         fetch(`${apiBaseUrl}/api/teams`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
 
-      if (!usersResponse.ok) {
-        throw new Error("Failed to load users.");
-      }
+      if (!usersResponse.ok) throw new Error("Failed to load users.");
+      if (!teamsResponse.ok) throw new Error("Failed to load teams.");
 
-      if (!teamsResponse.ok) {
-        throw new Error("Failed to load teams.");
-      }
-
-      const usersData = await usersResponse.json();
-      const teamsData = await teamsResponse.json();
-
-      setUsers(usersData);
-      setTeams(teamsData);
+      setUsers(await usersResponse.json());
+      setTeams(await teamsResponse.json());
     } catch (err) {
-      console.error(err);
       setError(err.message || "Something went wrong while loading data.");
     } finally {
       setLoading(false);
@@ -80,20 +153,15 @@ export default function UsersTeams() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: teamName,
-        }),
+        body: JSON.stringify({ name: teamName }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create team.");
-      }
+      if (!response.ok) throw new Error("Failed to create team.");
 
       setTeamName("");
       setSuccess("Team created successfully.");
       await loadData();
     } catch (err) {
-      console.error(err);
       setError(err.message || "Something went wrong while creating team.");
     } finally {
       setCreating(false);
@@ -104,7 +172,21 @@ export default function UsersTeams() {
     e.preventDefault();
 
     if (!selectedUser || !selectedTeam) {
-      setError("Please select a user and a team.");
+      setError("Please select an employee and a team.");
+      return;
+    }
+
+    const selectedUserObject = users.find(
+      (user) => (user.userId || user.email) === selectedUser
+    );
+
+    if (!selectedUserObject) {
+      setError("Selected user was not found.");
+      return;
+    }
+
+    if (selectedUserObject.role !== "EMPLOYEE") {
+      setError("Only employees can be assigned to teams.");
       return;
     }
 
@@ -137,17 +219,13 @@ export default function UsersTeams() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to assign user to team.");
-      }
+      if (!response.ok) throw new Error("Failed to assign user to team.");
 
       setSelectedUser("");
       setSelectedTeam("");
       setSuccess("User assigned to team successfully.");
-
       await loadData();
     } catch (err) {
-      console.error(err);
       setError(err.message || "Something went wrong while assigning user.");
     } finally {
       setAssigning(false);
@@ -161,8 +239,8 @@ export default function UsersTeams() {
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-slate-950">Users & Teams</h2>
-
+        <p className="text-sm font-semibold text-[#159c96]">Administration</p>
+        <h2 className="mt-2 text-3xl font-bold text-slate-950">Users & Teams</h2>
         <p className="mt-2 text-slate-500">
           Manage users, teams, and team membership.
         </p>
@@ -175,107 +253,99 @@ export default function UsersTeams() {
       )}
 
       {success && (
-        <div className="mb-6 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="mb-6 rounded-2xl bg-[#dff7f5] px-4 py-3 text-sm font-semibold text-[#159c96]">
           {success}
         </div>
       )}
 
       {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-slate-500">
+        <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
           Loading users and teams...
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Assign User to Team */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-6">
-            <h3 className="mb-4 text-lg font-semibold text-slate-950">
-              Assign User to Team
+          <div className="rounded-3xl bg-white p-6 shadow-sm shadow-slate-200">
+            <h3 className="mb-4 text-lg font-bold text-slate-950">
+              Assign Employee to Team
             </h3>
 
-            <form
-              onSubmit={handleAssignUserToTeam}
-              className="grid gap-3 md:grid-cols-3"
-            >
-              <select
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-slate-900"
-              >
-                <option value="">Select user</option>
-                {users.map((user) => (
-                  <option
-                    key={user.userId || user.email}
-                    value={user.userId || user.email}
-                  >
-                    {user.email || user.username} — {user.teamName || user.teamId || "No team"}
-                  </option>
-                ))}
-              </select>
+            <form onSubmit={handleAssignUserToTeam} className="grid gap-3 md:grid-cols-3">
+              <Select
+                options={userOptions}
+                value={
+                  userOptions.find((option) => option.value === selectedUser) || null
+                }
+                onChange={(option) => setSelectedUser(option?.value || "")}
+                placeholder="Select employee"
+                styles={selectStyles}
+                isSearchable
+              />
 
-              <select
-                value={selectedTeam}
-                onChange={(e) => setSelectedTeam(e.target.value)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-slate-900"
-              >
-                <option value="">Select team</option>
-                {teams.map((team) => (
-                  <option key={team.teamId} value={team.teamId}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                options={teamOptions}
+                value={
+                  teamOptions.find((option) => option.value === selectedTeam) || null
+                }
+                onChange={(option) => setSelectedTeam(option?.value || "")}
+                placeholder="Select team"
+                styles={selectStyles}
+                isSearchable
+              />
 
               <button
                 type="submit"
                 disabled={assigning}
-                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                className="rounded-2xl bg-[#22b8b0] px-4 py-3 text-sm font-semibold text-white hover:bg-[#159c96] disabled:opacity-60"
               >
                 {assigning ? "Assigning..." : "Assign"}
               </button>
             </form>
 
-            <p className="mt-3 text-xs text-slate-500">
-              After changing a user team, that user must log out and log in again
-              to get a fresh Cognito token.
+            <p className="mt-3 text-xs text-slate-400">
+              Managers and admins are not assigned to teams. After changing an
+              employee&apos;s team, that employee must log out and log in again to
+              get a fresh Cognito token.
             </p>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Users */}
-            <div className="rounded-3xl border border-slate-200 bg-white p-6">
-              <h3 className="mb-4 text-lg font-semibold text-slate-950">
-                Users
-              </h3>
+            <div className="rounded-3xl bg-white p-6 shadow-sm shadow-slate-200">
+              <h3 className="mb-4 text-lg font-bold text-slate-950">Users</h3>
 
               <div className="space-y-3">
                 {users.map((user) => (
                   <div
                     key={user.userId || user.email}
-                    className="rounded-2xl bg-slate-50 px-4 py-3"
+                    className="rounded-3xl bg-[#f7fbfc] px-4 py-3"
                   >
-                    <p className="font-medium text-slate-900">
+                    <p className="font-bold text-slate-900">
                       {user.name || user.email || user.username}
                     </p>
 
-                    <p className="text-sm text-slate-500">{user.email}</p>
+                    <p className="text-sm text-slate-400">{user.email}</p>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      {user.role} · {user.teamName || user.teamId || "No team"}
-                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+                        {user.role}
+                      </span>
+
+                      <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
+                        {user.role === "EMPLOYEE"
+                          ? user.teamName || user.teamId || "No team"
+                          : "Not team-based"}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Teams */}
-            <div className="rounded-3xl border border-slate-200 bg-white p-6">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <h3 className="text-lg font-semibold text-slate-950">Teams</h3>
-              </div>
+            <div className="rounded-3xl bg-white p-6 shadow-sm shadow-slate-200">
+              <h3 className="mb-4 text-lg font-bold text-slate-950">Teams</h3>
 
               <form onSubmit={handleCreateTeam} className="mb-5 flex gap-2">
                 <input
-                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-slate-900"
+                  className="flex-1 rounded-2xl border border-[#ccebed] bg-[#f7fbfc] px-4 py-3 text-sm outline-none transition focus:border-[#22b8b0] focus:bg-white focus:ring-4 focus:ring-[#dff7f5]"
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
                   placeholder="New team name"
@@ -284,7 +354,7 @@ export default function UsersTeams() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="rounded-2xl bg-[#22b8b0] px-4 py-3 text-sm font-semibold text-white hover:bg-[#159c96] disabled:opacity-60"
                 >
                   {creating ? "Creating..." : "Create"}
                 </button>
@@ -294,11 +364,10 @@ export default function UsersTeams() {
                 {teams.map((team) => (
                   <div
                     key={team.teamId}
-                    className="rounded-2xl bg-slate-50 px-4 py-3"
+                    className="rounded-3xl bg-[#f7fbfc] px-4 py-3"
                   >
-                    <p className="font-medium text-slate-900">{team.name}</p>
-
-                    <p className="text-sm text-slate-500">ID: {team.teamId}</p>
+                    <p className="font-bold text-slate-900">{team.name}</p>
+                    <p className="text-sm text-slate-400">ID: {team.teamId}</p>
                   </div>
                 ))}
               </div>

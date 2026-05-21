@@ -1,11 +1,79 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Select from "react-select";
 import { useAuth } from "../context/AuthContext";
+
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: "48px",
+    borderRadius: "18px",
+    borderColor: state.isFocused ? "#22b8b0" : "#ccebed",
+    backgroundColor: "#f7fbfc",
+    boxShadow: state.isFocused ? "0 0 0 4px #dff7f5" : "none",
+    cursor: "pointer",
+    "&:hover": {
+      borderColor: "#22b8b0",
+    },
+  }),
+
+  menu: (base) => ({
+    ...base,
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #d9eef2",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+    zIndex: 50,
+  }),
+
+  menuList: (base) => ({
+    ...base,
+    padding: "6px",
+  }),
+
+  option: (base, state) => ({
+    ...base,
+    borderRadius: "12px",
+    backgroundColor: state.isSelected
+      ? "#22b8b0"
+      : state.isFocused
+        ? "#dff7f5"
+        : "white",
+    color: state.isSelected ? "white" : "#0f172a",
+    padding: "12px 14px",
+    cursor: "pointer",
+    fontSize: "14px",
+  }),
+
+  placeholder: (base) => ({
+    ...base,
+    color: "#64748b",
+    fontSize: "14px",
+  }),
+
+  singleValue: (base) => ({
+    ...base,
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 500,
+  }),
+
+  indicatorSeparator: () => ({
+    display: "none",
+  }),
+
+  dropdownIndicator: (base, state) => ({
+    ...base,
+    color: state.isFocused ? "#159c96" : "#94a3b8",
+    "&:hover": {
+      color: "#159c96",
+    },
+  }),
+};
 
 export default function Projects() {
   const { user } = useAuth();
 
-  const canManageProjects =
-    user?.role === "MANAGER" || user?.role === "ADMIN";
+  const canManageProjects = user?.role === "MANAGER" || user?.role === "ADMIN";
 
   const [projects, setProjects] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -14,6 +82,7 @@ export default function Projects() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [teamId, setTeamId] = useState("frontend");
+  const [teamFilter, setTeamFilter] = useState("all");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,9 +153,7 @@ export default function Projects() {
 
       if (!response.ok) {
         throw new Error(
-          editingProjectId
-            ? "Failed to update project."
-            : "Failed to create project."
+          editingProjectId ? "Failed to update project." : "Failed to create project."
         );
       }
 
@@ -152,20 +219,50 @@ export default function Projects() {
     loadProjects();
   }, []);
 
+  const teams = ["all", ...new Set(projects.map((p) => p.teamId).filter(Boolean))];
+
+  const teamFilterOptions = useMemo(() => {
+    return teams.map((team) => ({
+      value: team,
+      label: team === "all" ? "All teams" : team,
+    }));
+  }, [teams]);
+
+  const projectTeamOptions = [
+    { value: "frontend", label: "Frontend" },
+    { value: "backend", label: "Backend" },
+    { value: "qa", label: "QA" },
+    { value: "devops", label: "DevOps" },
+    { value: "all", label: "All Teams" },
+  ];
+
+  const filteredProjects = canManageProjects
+    ? teamFilter === "all"
+      ? projects
+      : projects.filter((project) => project.teamId === teamFilter)
+    : projects.filter(
+        (project) =>
+          project.teamId === user?.teamId ||
+          project.teamId === user?.teamName ||
+          project.teamName === user?.teamId ||
+          project.teamName === user?.teamName
+      );
+
   return (
     <div>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-slate-950">Projects</h2>
+          <p className="text-sm font-semibold text-[#159c96]">Workspace</p>
+          <h2 className="mt-2 text-3xl font-bold text-slate-950">Projects</h2>
           <p className="mt-2 text-slate-500">
-            Manage projects and link tasks to them.
+            Manage projects and link tasks to the correct team.
           </p>
         </div>
 
         {canManageProjects && (
           <button
             onClick={handleNewProjectClick}
-            className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            className="rounded-2xl bg-[#22b8b0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#159c96]"
           >
             {showForm ? "Cancel" : "New Project"}
           </button>
@@ -178,69 +275,79 @@ export default function Projects() {
         </div>
       )}
 
+      {canManageProjects && (
+        <div className="mb-6 rounded-3xl bg-white p-4 shadow-sm shadow-slate-200">
+          <div className="w-full md:w-72">
+            <Select
+              options={teamFilterOptions}
+              value={teamFilterOptions.find((option) => option.value === teamFilter)}
+              onChange={(option) => setTeamFilter(option?.value || "all")}
+              styles={selectStyles}
+              isSearchable={false}
+            />
+          </div>
+        </div>
+      )}
+
       {canManageProjects && showForm && (
         <form
           onSubmit={handleSaveProject}
-          className="mb-6 rounded-3xl border border-slate-200 bg-white p-6"
+          className="mb-6 rounded-3xl bg-white p-6 shadow-sm shadow-slate-200"
         >
-          <h3 className="mb-4 text-lg font-semibold text-slate-950">
+          <h3 className="mb-4 text-lg font-bold text-slate-950">
             {editingProjectId ? "Edit Project" : "Create Project"}
           </h3>
 
           <div className="grid gap-4 md:grid-cols-3">
             <input
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+              className="rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 text-sm outline-none focus:border-[#22b8b0]"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Project name"
             />
 
             <input
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
+              className="rounded-2xl border border-slate-100 bg-[#f7fbfc] px-4 py-3 text-sm outline-none focus:border-[#22b8b0]"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Description"
             />
 
-            <select
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900"
-              value={teamId}
-              onChange={(e) => setTeamId(e.target.value)}
-            >
-              <option value="frontend">Frontend</option>
-              <option value="backend">Backend</option>
-              <option value="qa">QA</option>
-              <option value="devops">DevOps</option>
-              <option value="all">All Teams</option>
-            </select>
+            <Select
+              options={projectTeamOptions}
+              value={projectTeamOptions.find((option) => option.value === teamId)}
+              onChange={(option) => setTeamId(option?.value || "frontend")}
+              styles={selectStyles}
+              isSearchable={false}
+            />
           </div>
 
           <button
             type="submit"
             disabled={saving}
-            className="mt-4 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            className="mt-4 rounded-2xl bg-[#22b8b0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#159c96] disabled:opacity-60"
           >
-            {saving
-              ? "Saving..."
-              : editingProjectId
-                ? "Save Changes"
-                : "Create Project"}
+            {saving ? "Saving..." : editingProjectId ? "Save Changes" : "Create Project"}
           </button>
         </form>
       )}
 
       {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-slate-500">
+        <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
           Loading projects...
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <div
               key={project.projectId}
-              className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+              className="rounded-3xl bg-white p-6 shadow-sm shadow-slate-200"
             >
-              <h3 className="text-lg font-semibold text-slate-950">
+              <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
+                {project.teamName || project.teamId}
+              </span>
+
+              <h3 className="mt-4 text-lg font-bold text-slate-950">
                 {project.name}
               </h3>
 
@@ -248,22 +355,18 @@ export default function Projects() {
                 {project.description || "No description provided."}
               </p>
 
-              <p className="mt-3 text-xs text-slate-500">
-                Team: {project.teamId}
-              </p>
-
               {canManageProjects && (
                 <div className="mt-5 flex gap-2">
                   <button
                     onClick={() => handleEditClick(project)}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    className="rounded-2xl border border-slate-100 px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-[#f7fbfc]"
                   >
                     Edit
                   </button>
 
                   <button
                     onClick={() => handleDeleteProject(project.projectId)}
-                    className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                    className="rounded-2xl border border-red-100 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
                   >
                     Delete
                   </button>
@@ -271,6 +374,12 @@ export default function Projects() {
               )}
             </div>
           ))}
+
+          {!loading && filteredProjects.length === 0 && (
+            <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
+              No projects found.
+            </div>
+          )}
         </div>
       )}
     </div>
