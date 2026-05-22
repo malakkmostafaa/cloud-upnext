@@ -41,7 +41,20 @@ export async function publishTaskAssignedEvent({
   const command = new PublishCommand({
     TopicArn: TASK_ASSIGNED_TOPIC_ARN,
     Subject: `New task assigned: ${title}`,
-    Message: JSON.stringify(event),
+    Message: `Hello!
+
+      You have been assigned a new task in UpNext.
+
+      Task Details:
+      --------------
+      Title:    ${title}
+      Priority: ${priority}
+      Deadline: ${deadline ? deadline.split('T')[0] : 'No deadline'}
+      Team:     ${teamId}
+
+      Please log in to UpNext to view and manage your tasks.
+
+      This is an automated notification from UpNext.`,
     MessageAttributes: {
       eventType: {
         DataType: "String",
