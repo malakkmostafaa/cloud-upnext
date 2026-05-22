@@ -10,6 +10,8 @@
 
 > Click the link above to open the live application directly. No additional configuration required.
 
+**Demo Video URL:** [https://drive.google.com/drive/folders/1mja5fiqRuUdJjiUO2lypZN7IS1otZnZH?usp=sharing](https://drive.google.com/drive/folders/1mja5fiqRuUdJjiUO2lypZN7IS1otZnZH?usp=sharing)
+> Checkout the Demo video through this link.
 ---
 
 ## 🏗️ Architecture Diagram
@@ -64,19 +66,7 @@ The system is deployed in a high-availability setup across **two Availability Zo
 | Ali | ali@upnext.com | Password123! | Manager | — |
 | Sara | sara@upnext.com | Password123! | Employee | Frontend |
 | Omar | omar@upnext.com | Password123! | Employee | Backend |
-
----
-
-## 🎬 Required Demo Scenario
-
-1. **Login as Ali** (Manager) → `ali@upnext.com`
-2. **Create Task A** → assign to Sara on the Frontend team
-3. **Create Task B** → assign to Omar on the Backend team
-4. **Login as Sara** → sees **only Task A** (Frontend team isolation enforced server-side)
-5. **Login as Omar** → sees **only Task B** (Backend team isolation enforced server-side)
-6. **Login as Ali** → sees **both Task A and Task B**, can filter by team
-
-> ⚠️ Team isolation is enforced **server-side** using DynamoDB GSI on `teamId`. Employees cannot access another team's tasks even by guessing the task ID — the backend returns `403 Forbidden`.
+| Farida | farida@upnext.com | Password123! | Employee | Backend |
 
 ---
 
@@ -110,8 +100,13 @@ Dashboard name: `UpNext-Dashboard`
 | Lambda Invocations | AWS/Lambda Invocations |
 | SQS Messages Sent | AWS/SQS NumberOfMessagesSent |
 | Lambda Errors | AWS/Lambda Errors |
+| Tasks created per day | tasks created per day |
+| Average time to close | TimeToClose |
+| Tasks closed per day per team | TasksClosed |
+| CPUUtilization | CPUUtilization |
 
 Alarm: `UpNext-Lambda-Error-Alarm` — triggers when Lambda errors > 0, publishes to SNS.
+Alarm : `upnext-overdue-tasks-alarm` — triggers when OverdueTasks >= 1 for 1 datapoints within 5 minutes
 
 ---
 
@@ -143,47 +138,27 @@ npm run dev
 Create a `.env` file in the `backend/` directory:
 
 ```env
-PORT=5000
-NODE_ENV=development
-AWS_REGION=eu-central-1
+PORT=
+NODE_ENV=
+AWS_REGION=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
 
-# Cognito
-COGNITO_USER_POOL_ID=your_user_pool_id
-COGNITO_CLIENT_ID=your_client_id
+COGNITO_USER_POOL_ID=
+COGNITO_APP_CLIENT_ID=
+COGNITO_CLIENT_ID = 
 
-# DynamoDB Tables
-USERS_TABLE=upnext-users
-TEAMS_TABLE=upnext-teams
-PROJECTS_TABLE=upnext-projects
-TASKS_TABLE=upnext-tasks
-COMMENTS_TABLE=upnext-comments
-ACTIVITY_LOG_TABLE=upnext-activity-log
-AUDIT_LOG_TABLE=upnext-audit-log
+USERS_TABLE=
+TEAMS_TABLE=
+PROJECTS_TABLE=
+TASKS_TABLE=
+COMMENTS_TABLE=
+ACTIVITY_LOG_TABLE=
+AUDIT_LOG_TABLE=
 
-# S3
-ORIGINAL_IMAGES_BUCKET=upnext-original-images
-RESIZED_IMAGES_BUCKET=upnext-resized-images
+ORIGINAL_IMAGES_BUCKET=
+RESIZED_IMAGES_BUCKET=
 
-# SNS / SQS
-TASK_ASSIGNED_TOPIC_ARN=your_sns_topic_arn
-TASK_ASSIGNMENT_QUEUE_URL=your_sqs_queue_url
+TASK_ASSIGNED_TOPIC_ARN=
+TASK_ASSIGNMENT_QUEUE_URL=
 ```
-
----
-
-## ⚠️ Important Submission Notes
-
-- **DO NOT terminate** any AWS instances or resources after submission
-- Only **STOP** instances when not in use
-- Terminating resources will result in loss of data and a zero grade
-
----
-
-## 👨‍💻 Team
-
-- Mohamed Abdelsatar
-- Jessica Ehab  
-- Donia Ali
-
-**Course:** Software Cloud Computing 2026 — Dr. John Zaki  
-**University:** German International University (GIU)
