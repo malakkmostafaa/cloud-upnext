@@ -16,7 +16,7 @@
 
 ## 🏗️ Architecture Diagram
 
-![UpNext AWS Architecture](https://drive.google.com/drive/folders/1M4CHejSCD-P-5m-jHls5dZYgElUUDVkK?usp=sharing)
+**Upnext AWS Architecture Diagram:** [https://drive.google.com/drive/folders/1M4CHejSCD-P-5m-jHls5dZYgElUUDVkK?usp=drive_link](https://drive.google.com/drive/folders/1M4CHejSCD-P-5m-jHls5dZYgElUUDVkK?usp=drive_link)
 
 The system is deployed in a high-availability setup across **two Availability Zones** in `eu-central-1`, fronted by an Application Load Balancer and CloudFront.
 
