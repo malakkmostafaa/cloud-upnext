@@ -12,10 +12,10 @@ api.interceptors.request.use(
       const session = await fetchAuthSession();
       const idToken = session.tokens?.idToken?.toString();
 
-      console.log("ID TOKEN SENT TO BACKEND:", idToken);
-
       if (idToken) {
         config.headers.Authorization = `Bearer ${idToken}`;
+      } else {
+        delete config.headers.Authorization;
       }
     } catch (error) {
       delete config.headers.Authorization;
