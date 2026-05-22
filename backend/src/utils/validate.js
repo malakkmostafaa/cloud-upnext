@@ -1,6 +1,17 @@
 import { ApiError } from "./errors.js";
-import { TaskStatus, TaskPriority } from "../config/constants.js";
+const TaskPriority = {
+  LOW: "LOW",
+  MEDIUM: "MEDIUM",
+  HIGH: "HIGH",
+  CRITICAL: "CRITICAL",
+};
 
+const TaskStatus = {
+  TO_DO: "TO_DO",
+  IN_PROGRESS: "IN_PROGRESS",
+  IN_REVIEW: "IN_REVIEW",
+  DONE: "DONE",
+};
 function isNonEmptyString(v, max = Infinity) {
   return typeof v === "string" && v.trim().length > 0 && v.length <= max;
 }

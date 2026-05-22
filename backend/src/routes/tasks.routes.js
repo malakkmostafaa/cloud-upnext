@@ -3,7 +3,6 @@ import express from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireManager } from "../middleware/requireManager.js";
 import { requireEmployeeOrManager } from "../middleware/requireEmployeeOrManager.js";
-import { Role } from "../config/constants.js";
 import { ApiError } from "../utils/errors.js";
 import {
   validateTaskPayload,
@@ -20,7 +19,10 @@ import {
 const router = express.Router();
 
 function isManager(user) {
-  return user.role === Role.MANAGER || user.role === Role.ADMIN;
+  return (
+    user.role === "MANAGER" ||
+    user.role === "ADMIN"
+  );
 }
 
 // CREATE TASK — manager only.
@@ -80,16 +82,70 @@ router.get(
   }
 );
 
-// EDIT TASK — TASK-08, manager only.
+// EDIT TASK
+// Managers/Admins:
+// - can update any task
+//
+// Employees:
+// - can ONLY update tasks assigned to them
+
 router.put(
   "/tasks/:id",
   requireAuth,
-  requireManager,
+  requireEmployeeOrManager,
   async (req, res, next) => {
     try {
+
+      const existingTask = await getTaskById(req.params.id);
+
+      if (!existingTask) {
+        throw ApiError.notFound("Task not found");
+      }
+
+      const isManager =
+        req.user.role === "MANAGER" ||
+        req.user.role === "ADMIN";
+
+     const isAssignedEmployee =
+  existingTask.assigneeId === req.user.email 
+  // existingTask.assigneeId === req.user.name?.toLowerCase();
+
+      // EMPLOYEE CAN ONLY UPDATE OWN TASK
+      if (!isManager && !isAssignedEmployee) {
+        throw ApiError.forbidden(
+          "You can only update your own assigned tasks"
+        );
+      }
+
       const patch = validateTaskUpdatePayload(req.body);
-      const task = await updateTask(req.params.id, patch, req.user.userId);
-      res.json(task);
+
+      // EMPLOYEE CAN ONLY CHANGE STATUS
+      if (!isManager) {
+
+        const onlyStatusPatch = {
+          status: patch.status,
+        };
+
+        const updatedTask = await updateTask(
+  req.params.id,
+  onlyStatusPatch,
+  req.user.userId,
+  req.user.email
+);
+
+        return res.json(updatedTask);
+      }
+
+      // MANAGER CAN CHANGE ANYTHING
+      const updatedTask = await updateTask(
+  req.params.id,
+  patch,
+  req.user.userId,
+  req.user.email
+);
+
+      res.json(updatedTask);
+
     } catch (err) {
       next(err);
     }
@@ -129,10 +185,11 @@ router.patch(
       }
 
       const updated = await updateTask(
-        req.params.id,
-        { status: patch.status },
-        req.user.userId
-      );
+  req.params.id,
+  { status: patch.status },
+  req.user.userId,
+  req.user.email
+);
       res.json(updated);
     } catch (err) {
       next(err);
