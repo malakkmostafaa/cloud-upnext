@@ -1,9 +1,16 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from "@hello-pangea/dnd";
 import { useAuth } from "../context/AuthContext";
-import { listTasks, updateTaskStatus } from "../services/tasksService";
-import TaskCreateModal from "../components/tasks/TaskCreateModal";
+import {
+  listTasks,
+  updateTaskStatus
+} from "../services/tasksService";import TaskCreateModal from "../components/tasks/TaskCreateModal";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
 // Kanban columns keyed by the backend status enum.
@@ -134,6 +141,23 @@ function priorityClass(priorityLabel) {
   if (priorityLabel === "High") return "bg-orange-50 text-orange-600";
   if (priorityLabel === "Medium") return "bg-yellow-50 text-yellow-700";
   return "bg-[#dff7f5] text-[#159c96]";
+}
+function teamClass(teamId) {
+  const team = (teamId || "").toLowerCase();
+
+  if (team === "frontend") {
+    return "bg-blue-50 text-blue-700";
+  }
+
+  if (team === "backend") {
+    return "bg-purple-50 text-purple-700";
+  }
+
+  if (team === "security") {
+    return "bg-red-50 text-red-700";
+  }
+
+  return "bg-green-50 text-green-700";
 }
 
 // TASK-11: surface the deadline and flag overdue / due-soon tasks.
@@ -281,6 +305,42 @@ export default function Board() {
     setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
     setSelectedTaskId(null);
   }
+  const handleDragEnd = async (result) => {
+  if (!result.destination) return;
+
+  const { draggableId, destination, source } = result;
+
+  if (destination.droppableId === source.droppableId) return;
+
+  const task = tasks.find((t) => t.taskId === draggableId);
+
+  if (!task) return;
+
+  const isOwnTask =
+    (task.assigneeId || "").toLowerCase() ===
+    (user?.email || "").toLowerCase();
+
+  if (!isManager && !isOwnTask) {
+    alert("You can only move your own tasks");
+    return;
+  }
+
+  try {
+    await updateTaskStatus(draggableId, destination.droppableId);
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.taskId === draggableId
+          ? { ...t, status: destination.droppableId }
+          : t
+      )
+    );
+  } catch (error) {
+    console.error(error);
+    alert("Failed to update task status");
+  }
+};
+  
 
   return (
     <div>
@@ -350,31 +410,41 @@ export default function Board() {
           isSearchable={false}
         />
       </div>
+      <div></div>
 
       {error && (
         <div className="mb-6 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
+      
+     
 
-      {loading ? (
-        <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
-          Loading tasks...
-        </div>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-4">
-          {COLUMNS.map((column) => {
-            const columnTasks = filteredTasks.filter(
-              (task) => task.status === column.key
-            );
+    {loading ? (
+  <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
+    Loading tasks...
+  </div>
+) : (
+  <DragDropContext onDragEnd={handleDragEnd}>
+    <div className="grid gap-5 lg:grid-cols-4">
+      {COLUMNS.map((column) => {
+        const columnTasks = filteredTasks.filter(
+          (task) => task.status === column.key
+        );
 
-            return (
+        return (
+          <Droppable droppableId={column.key} key={column.key}>
+            {(provided) => (
               <div
-                key={column.key}
+                ref={provided.innerRef}
+                {...provided.droppableProps}
                 className="min-h-[600px] rounded-3xl bg-white p-4 shadow-sm shadow-slate-200"
               >
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900">{column.label}</h3>
+                  <h3 className="font-bold text-slate-900">
+                    {column.label}
+                  </h3>
+
                   <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
                     {columnTasks.length}
                   </span>
@@ -386,77 +456,114 @@ export default function Board() {
                       No tasks here
                     </div>
                   ) : (
-                    columnTasks.map((task) => {
+                    columnTasks.map((task, index) => {
                       const priorityLabel =
                         PRIORITY_LABEL[task.priority] ?? task.priority;
+
                       const deadline = deadlineMeta(task);
 
                       return (
-                        <div
+                        <Draggable
+                          draggableId={task.taskId}
+                          index={index}
                           key={task.taskId}
-                          onClick={() => setSelectedTaskId(task.taskId)}
-                          className="cursor-pointer rounded-3xl bg-[#f7fbfc] p-4 transition hover:ring-2 hover:ring-[#dff7f5]"
                         >
-                          <div className="mb-3 flex items-start justify-between gap-3">
-                            <h4 className="font-bold text-slate-950">
-                              {task.title}
-                            </h4>
-                            <span
-                              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
-                                priorityLabel
-                              )}`}
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              onClick={() =>
+                                setSelectedTaskId(task.taskId)
+                              }
+                              className="cursor-pointer rounded-3xl bg-[#f7fbfc] p-4 transition hover:ring-2 hover:ring-[#dff7f5]"
                             >
-                              {priorityLabel}
-                            </span>
-                          </div>
+                              <div className="mb-3 flex items-start justify-between gap-3">
+                                <h4 className="font-bold text-slate-950">
+                                  {task.title}
+                                </h4>
 
-                          <p className="line-clamp-2 text-sm text-slate-500">
-                            {task.description}
-                          </p>
+                                <div className="flex flex-col items-end gap-1">
+  <span
+    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
+      priorityLabel
+    )}`}
+  >
+    {priorityLabel}
+  </span>
 
-                          <div className="mt-4 space-y-1 text-xs text-slate-400">
-                            <p>Team: {task.teamId}</p>
-                            <p>Assignee: {task.assigneeId}</p>
-                            <p className={deadline.className}>
-                              Deadline: {deadline.label}
-                            </p>
-                          </div>
+  <span
+    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold text-white ${
+      task.teamId === "backend"
+        ? "bg-blue-500"
+        : task.teamId === "frontend"
+        ? "bg-pink-500"
+        : task.teamId === "security"
+        ? "bg-green-600"
+        : "bg-slate-500"
+    }`}
+  >
+    {task.teamId}
+  </span>
+</div>
+                              </div>
 
-                          {/* Status dropdown — clicks here must not open the modal. */}
-                          <div
-                            className="mt-4"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Select
-                              options={STATUS_OPTIONS}
-                              value={STATUS_OPTIONS.find(
-                                (option) => option.value === task.status
-                              )}
-                              onChange={(option) =>
-                                handleStatusChange(
-                                  task,
-                                  option?.value || task.status
-                                )
-                              }
-                              styles={smallSelectStyles}
-                              isSearchable={false}
-                              isDisabled={
-                                !isManager &&
-                                (task.assigneeId || "").toLowerCase() !==
-                                  (user?.email || "").toLowerCase()
-                              }
-                            />
-                          </div>
-                        </div>
+                              <p className="line-clamp-2 text-sm text-slate-500">
+                                {task.description}
+                              </p>
+
+                              <div className="mt-4 space-y-1 text-xs text-slate-400">
+                                <p>Team: {task.teamId}</p>
+
+                                <p>Assignee: {task.assigneeId}</p>
+
+                                <p className={deadline.className}>
+                                  Deadline: {deadline.label}
+                                </p>
+                              </div>
+
+                              <div
+                                className="mt-4"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Select
+                                  options={STATUS_OPTIONS}
+                                  value={STATUS_OPTIONS.find(
+                                    (option) =>
+                                      option.value === task.status
+                                  )}
+                                  onChange={(option) =>
+                                    handleStatusChange(
+                                      task,
+                                      option?.value || task.status
+                                    )
+                                  }
+                                  styles={smallSelectStyles}
+                                  isSearchable={false}
+                                  isDisabled={
+                                    !isManager &&
+                                    (task.assigneeId || "").toLowerCase() !==
+                                      (user?.email || "").toLowerCase()
+                                  }
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
                       );
                     })
                   )}
+
+                  {provided.placeholder}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
+          </Droppable>
+        );
+      })}
     </div>
-  );
+  </DragDropContext>
+)}
+</div>
+);
 }

@@ -1,4 +1,11 @@
 import { randomUUID } from "crypto";
+import { ApiError } from "../utils/errors.js";
+import { getProjectById } from "./projects.service.js";
+import { publishTaskAssignedEvent } from "./notifications.service.js";
+
+import { docClient } from "../db/dynamo.js";
+import { Tables, TaskIndexes } from "../config/tables.js";
+
 import {
   GetCommand,
   PutCommand,
@@ -7,19 +14,17 @@ import {
   DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 
-import { docClient } from "../db/dynamo.js";
-import { Tables, TaskIndexes } from "../config/tables.js";
-import { TaskStatus, Role } from "../config/constants.js";
-import { ApiError } from "../utils/errors.js";
-import { getProjectById } from "./projects.service.js";
-import { publishTaskAssignedEvent } from "./notifications.service.js";
+const TaskStatus = {
+  TO_DO: "TO_DO",
+};
+
+const Role = {
+  MANAGER: "MANAGER",
+  ADMIN: "ADMIN",
+};
 
 /**
  * Gets one task by ID.
- * Used by task routes and image routes.
- *
- * @param {string} taskId
- * @returns {Promise<object|null>}
  */
 export async function getTaskById(taskId) {
   if (!taskId) {
@@ -38,18 +43,14 @@ export async function getTaskById(taskId) {
 
 /**
  * Creates a task.
- * Caller must have already validated the payload and authorized the request.
- *
- * Manager-only route should call this service.
- *
- * @param {object} input - validated task fields
- * @param {string} createdBy - Cognito sub of the manager creating the task
  */
 export async function createTask(input, createdBy) {
   const project = await getProjectById(input.projectId);
 
   if (!project) {
-    throw ApiError.badRequest("projectId does not reference an existing project");
+    throw ApiError.badRequest(
+      "projectId does not reference an existing project"
+    );
   }
 
   const now = new Date().toISOString();
@@ -130,7 +131,9 @@ async function queryTasksByTeam(teamId) {
       TableName: Tables.TASKS,
       IndexName: TaskIndexes.BY_TEAM,
       KeyConditionExpression: "teamId = :teamId",
-      ExpressionAttributeValues: { ":teamId": teamId },
+      ExpressionAttributeValues: {
+        ":teamId": teamId,
+      },
     })
   );
 
@@ -139,14 +142,6 @@ async function queryTasksByTeam(teamId) {
 
 /**
  * Lists tasks with server-side team isolation.
- *
- * - Managers/admins see every task, or one team's tasks when `filterTeamId`
- *   is supplied (TASK-03, TASK-04).
- * - Employees are hard-scoped to their own team. Any `filterTeamId` is ignored
- *   so they cannot read another team's tasks (TASK-05).
- *
- * @param {{ role: string, teamId?: string, filterTeamId?: string }} args
- * @returns {Promise<object[]>}
  */
 export async function listTasks({ role, teamId, filterTeamId }) {
   const normalizedRole = role?.toUpperCase();
@@ -156,6 +151,8 @@ export async function listTasks({ role, teamId, filterTeamId }) {
   const isManager =
     normalizedRole === "MANAGER" || normalizedRole === "ADMIN";
 
+
+  // EMPLOYEE
   if (!isManager) {
     if (!normalizedTeamId) return [];
     return queryTasksByTeam(normalizedTeamId);
@@ -165,25 +162,27 @@ export async function listTasks({ role, teamId, filterTeamId }) {
     return queryTasksByTeam(normalizedFilterTeamId);
   }
 
+  // MANAGER GET ALL TASKS
   const result = await docClient.send(
     new ScanCommand({
       TableName: Tables.TASKS,
     })
   );
 
+  console.log("SCAN RESULT:", result.Items);
+
   return result.Items || [];
 }
 
 /**
- * Updates a task. Caller must have validated the payload and authorized the
- * request (manager-only). A status change is appended to `statusHistory`.
- *
- * @param {string} taskId
- * @param {object} patch - validated subset of mutable task fields
- * @param {string} actor - Cognito sub of the user making the change
- * @returns {Promise<object>} the updated task
+ * Updates a task.
  */
-export async function updateTask(taskId, patch, actor) {
+export async function updateTask(
+  taskId,
+  patch,
+  actor,
+  actorEmail
+) {
   const current = await getTaskById(taskId);
 
   if (!current) {
@@ -194,39 +193,82 @@ export async function updateTask(taskId, patch, actor) {
     return current;
   }
 
-  if (patch.projectId && patch.projectId !== current.projectId) {
-    const project = await getProjectById(patch.projectId);
+  if (
+    patch.projectId &&
+    patch.projectId !== current.projectId
+  ) {
+    const project =
+      await getProjectById(
+        patch.projectId
+      );
 
     if (!project) {
-      throw ApiError.badRequest("projectId does not reference an existing project");
+      throw ApiError.badRequest(
+        "projectId does not reference an existing project"
+      );
     }
   }
 
   const now = new Date().toISOString();
-  const updated = { ...current, ...patch, updatedAt: now };
 
-  if (patch.status && patch.status !== current.status) {
+  const updated = {
+    ...current,
+    ...patch,
+    updatedAt: now,
+  };
+
+  // STATUS HISTORY
+  if (
+    patch.status &&
+    patch.status !== current.status
+  ) {
     updated.statusHistory = [
       ...(current.statusHistory || []),
-      { status: patch.status, by: actor, at: now },
+      {
+        status: patch.status,
+        by: actor,
+        at: now,
+      },
     ];
   }
 
+  // UPDATE TASK
   await docClient.send(
     new PutCommand({
       TableName: Tables.TASKS,
       Item: updated,
-      ConditionExpression: "attribute_exists(taskId)",
+      ConditionExpression:
+        "attribute_exists(taskId)",
     })
   );
+
+  // AUDIT LOG
+ // AUDIT LOG
+if (
+  patch.status &&
+  patch.status !== current.status
+) {
+  await docClient.send(
+    new PutCommand({
+      TableName: Tables.AUDIT_LOGS,
+      Item: {
+        logId: randomUUID(),
+        taskId,
+        taskTitle: current.title,
+        changedBy: actorEmail || actor,
+        oldStatus: current.status,
+        newStatus: patch.status,
+        timestamp: now,
+      },
+    })
+  );
+}
 
   return updated;
 }
 
 /**
  * Permanently deletes a task.
- *
- * @param {string} taskId
  */
 export async function deleteTask(taskId) {
   try {
@@ -234,12 +276,18 @@ export async function deleteTask(taskId) {
       new DeleteCommand({
         TableName: Tables.TASKS,
         Key: { taskId },
-        ConditionExpression: "attribute_exists(taskId)",
+        ConditionExpression:
+          "attribute_exists(taskId)",
       })
     );
   } catch (error) {
-    if (error.name === "ConditionalCheckFailedException") {
-      throw ApiError.notFound("Task not found");
+    if (
+      error.name ===
+      "ConditionalCheckFailedException"
+    ) {
+      throw ApiError.notFound(
+        "Task not found"
+      );
     }
 
     throw error;
