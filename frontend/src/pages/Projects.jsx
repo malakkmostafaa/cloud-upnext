@@ -95,7 +95,7 @@ export default function Projects() {
     setError("");
     setLoading(true);
 
-    const response = await api.get("/projects");
+    const response = await api.get("/api/projects");
 
     const data = response.data.projects || response.data;
     setProjects(Array.isArray(data) ? data : []);
@@ -131,9 +131,9 @@ export default function Projects() {
     };
 
     if (editingProjectId) {
-      await api.put(`/projects/${editingProjectId}`, payload);
+      await api.put(`/api/projects/${editingProjectId}`, payload);
     } else {
-      await api.post("/projects", payload);
+      await api.post("/api/projects", payload);
     }
 
     resetForm();
@@ -156,7 +156,7 @@ export default function Projects() {
   try {
     setError("");
 
-    await api.delete(`/projects/${projectId}`);
+    await api.delete(`/api/projects/${projectId}`);
 
     await loadProjects();
   } catch (err) {

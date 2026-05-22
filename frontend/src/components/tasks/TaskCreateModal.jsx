@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
+import api from "../../api/api";
 import { createTask } from "../../services/tasksService";
 import { listProjects } from "../../services/projectsService";
-
-// TODO(users/teams-member): replace these with API calls to /api/users and
-// /api/teams once those endpoints land. Mock data keeps the demo working today.
-import { mockTeams, mockUsers } from "../../data/mockData";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
@@ -17,19 +14,21 @@ const initialForm = {
   deadline: "",
   assigneeId: "",
   teamId: "",
+  teamName: "",
   projectId: "",
 };
 
 export default function TaskCreateModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(initialForm);
   const [projects, setProjects] = useState([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loadingData, setLoadingData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState([]);
 
-  // Employees can only be assignees; filter out admins and managers.
-  const assignees = mockUsers.filter((u) => u.role === "EMPLOYEE");
+  // Only employees can be assignees (the task's team follows the assignee).
+  const assignees = users.filter((u) => u.role === "EMPLOYEE");
 
   useEffect(() => {
     if (!open) return;
@@ -39,23 +38,27 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
     setFieldErrors([]);
 
     let cancelled = false;
-    setLoadingProjects(true);
+    setLoadingData(true);
 
-    listProjects()
-      .then((data) => {
-        if (!cancelled) setProjects(data);
+    // Projects feed the project dropdown; users feed the assignee dropdown.
+    Promise.all([listProjects(), api.get("/api/users")])
+      .then(([projectData, usersResponse]) => {
+        if (cancelled) return;
+        setProjects(Array.isArray(projectData) ? projectData : []);
+        const userData = usersResponse.data;
+        setUsers(Array.isArray(userData) ? userData : []);
       })
       .catch((err) => {
         if (!cancelled) {
           setError(
             err.response?.data?.message ||
               err.message ||
-              "Failed to load projects."
+              "Failed to load form data."
           );
         }
       })
       .finally(() => {
-        if (!cancelled) setLoadingProjects(false);
+        if (!cancelled) setLoadingData(false);
       });
 
     return () => {
@@ -69,31 +72,48 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleAssigneeChange(userId) {
-    const user = assignees.find((u) => u.userId === userId);
+  function handleAssigneeChange(email) {
+    const user = assignees.find((u) => u.email === email);
     setForm((prev) => ({
       ...prev,
-      assigneeId: userId,
-      // Auto-fill team from the chosen assignee — keeps the data consistent
-      // with the spec's "every employee belongs to exactly one team".
-      teamId: user?.teamId ?? prev.teamId,
+      assigneeId: email,
+      // The task's team always follows the assignee — every employee belongs
+      // to exactly one team, so the team is not chosen independently.
+      teamId: user?.teamId ?? "",
+      teamName: user?.teamName ?? user?.teamId ?? "",
+      // Clear the project: the previously picked one may not belong to the
+      // new assignee's team.
+      projectId: "",
     }));
   }
+
+  // Only projects belonging to the assignee's team (plus company-wide "all"
+  // projects) may be linked to the task.
+  const availableProjects = projects.filter(
+    (p) => p.teamId === form.teamId || p.teamId === "all"
+  );
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setFieldErrors([]);
+
+    if (!form.teamId) {
+      setError("The selected employee has no team assigned. Assign them to a team first.");
+      return;
+    }
+
     setSubmitting(true);
-
     try {
-      const payload = {
-        ...form,
+      const task = await createTask({
+        title: form.title,
         description: form.description || undefined,
+        priority: form.priority,
         deadline: new Date(form.deadline).toISOString(),
-      };
-
-      const task = await createTask(payload);
+        assigneeId: form.assigneeId,
+        teamId: form.teamId,
+        projectId: form.projectId,
+      });
       onCreated?.(task);
       onClose();
     } catch (err) {
@@ -201,34 +221,30 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
                 value={form.assigneeId}
                 onChange={(e) => handleAssigneeChange(e.target.value)}
                 required
+                disabled={loadingData}
               >
                 <option value="" disabled>
-                  Select employee
+                  {loadingData
+                    ? "Loading employees..."
+                    : assignees.length === 0
+                      ? "No employees found"
+                      : "Select employee"}
                 </option>
                 {assignees.map((u) => (
-                  <option key={u.userId} value={u.userId}>
-                    {u.name} ({u.teamName})
+                  <option key={u.email} value={u.email}>
+                    {u.username || u.email}
+                    {u.teamName ? ` (${u.teamName})` : ""}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Team" required>
-              <select
-                className={inputClass}
-                value={form.teamId}
-                onChange={(e) => update("teamId", e.target.value)}
-                required
-              >
-                <option value="" disabled>
-                  Select team
-                </option>
-                {mockTeams.map((t) => (
-                  <option key={t.teamId} value={t.teamId}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+            <Field label="Team">
+              <input
+                className={`${inputClass} bg-slate-50 text-slate-500`}
+                value={form.teamName || "— follows the assignee —"}
+                readOnly
+              />
             </Field>
           </div>
 
@@ -238,12 +254,18 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
               value={form.projectId}
               onChange={(e) => update("projectId", e.target.value)}
               required
-              disabled={loadingProjects}
+              disabled={loadingData || !form.teamId}
             >
               <option value="" disabled>
-                {loadingProjects ? "Loading projects..." : "Select project"}
+                {loadingData
+                  ? "Loading projects..."
+                  : !form.teamId
+                    ? "Select an assignee first"
+                    : availableProjects.length === 0
+                      ? "No projects for this team"
+                      : "Select project"}
               </option>
-              {projects.map((p) => (
+              {availableProjects.map((p) => (
                 <option key={p.projectId} value={p.projectId}>
                   {p.name}
                 </option>
@@ -264,8 +286,8 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
             </button>
             <button
               type="submit"
-              disabled={submitting || loadingProjects}
-              className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={submitting || loadingData}
+              className="rounded-xl bg-[#22b8b0] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#159c96] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? "Creating..." : "Create Task"}
             </button>
