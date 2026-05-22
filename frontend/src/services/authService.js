@@ -1,6 +1,6 @@
-import api from "./api";
+import api from "../api/api";
 
 export async function fetchCurrentUser() {
-  const response = await api.get("/me");
+  const response = await api.get("/api/me");
   return response.data;
 }

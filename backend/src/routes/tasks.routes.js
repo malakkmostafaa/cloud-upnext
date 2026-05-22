@@ -96,6 +96,50 @@ router.put(
   }
 );
 
+// UPDATE TASK STATUS — managers, or the employee the task is assigned to.
+// Spec: "Employees ... can update status of tasks assigned to them."
+router.patch(
+  "/tasks/:id/status",
+  requireAuth,
+  requireEmployeeOrManager,
+  async (req, res, next) => {
+    try {
+      const patch = validateTaskUpdatePayload({ status: req.body?.status });
+
+      if (patch.status === undefined) {
+        throw ApiError.badRequest("status is required");
+      }
+
+      const task = await getTaskById(req.params.id);
+
+      if (!task) {
+        throw ApiError.notFound("Task not found");
+      }
+
+      // Managers may move any task; an employee only their own assigned task.
+      // Tasks store the assignee's email as `assigneeId`.
+      const assignedToMe =
+        (task.assigneeId || "").toLowerCase() ===
+        (req.user.email || "").toLowerCase();
+
+      if (!isManager(req.user) && !assignedToMe) {
+        throw ApiError.forbidden(
+          "You can only update the status of tasks assigned to you"
+        );
+      }
+
+      const updated = await updateTask(
+        req.params.id,
+        { status: patch.status },
+        req.user.userId
+      );
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // DELETE TASK — TASK-09, manager only.
 router.delete(
   "/tasks/:id",

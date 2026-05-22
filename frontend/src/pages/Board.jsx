@@ -1,17 +1,19 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
-import { mockTasks } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
+import { listTasks, updateTaskStatus } from "../services/tasksService";
 import TaskCreateModal from "../components/tasks/TaskCreateModal";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
-const columns = ["To Do", "In Progress", "In Review", "Done"];
+// Kanban columns keyed by the backend status enum.
+const COLUMNS = [
+  { key: "TO_DO", label: "To Do" },
+  { key: "IN_PROGRESS", label: "In Progress" },
+  { key: "IN_REVIEW", label: "In Review" },
+  { key: "DONE", label: "Done" },
+];
 
-const STATUS_TO_COLUMN = {
-  TO_DO: "To Do",
-  IN_PROGRESS: "In Progress",
-  IN_REVIEW: "In Review",
-  DONE: "Done",
-};
+const STATUS_OPTIONS = COLUMNS.map((c) => ({ value: c.key, label: c.label }));
 
 const PRIORITY_LABEL = {
   LOW: "Low",
@@ -126,79 +128,151 @@ const smallSelectStyles = {
   }),
 };
 
-function priorityClass(priority) {
-  if (priority === "Critical") return "bg-red-50 text-red-600";
-  if (priority === "High") return "bg-orange-50 text-orange-600";
-  if (priority === "Medium") return "bg-yellow-50 text-yellow-700";
+function priorityClass(priorityLabel) {
+  if (priorityLabel === "Critical") return "bg-red-50 text-red-600";
+  if (priorityLabel === "High") return "bg-orange-50 text-orange-600";
+  if (priorityLabel === "Medium") return "bg-yellow-50 text-yellow-700";
   return "bg-[#dff7f5] text-[#159c96]";
+}
+
+// TASK-11: surface the deadline and flag overdue / due-soon tasks.
+function deadlineMeta(task) {
+  if (!task.deadline) {
+    return { label: "No deadline", className: "text-slate-400" };
+  }
+
+  const label = task.deadline.slice(0, 10);
+
+  if (task.status === "DONE") {
+    return { label, className: "text-slate-400" };
+  }
+
+  const due = new Date(task.deadline);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((due - today) / 86400000);
+
+  if (diffDays < 0) {
+    return { label: `${label} · Overdue`, className: "text-red-600 font-semibold" };
+  }
+  if (diffDays <= 2) {
+    return { label: `${label} · Due soon`, className: "text-orange-600 font-semibold" };
+  }
+  return { label, className: "text-slate-400" };
 }
 
 export default function Board() {
   const { user } = useAuth();
-  const canCreateTask = user?.role === "MANAGER" || user?.role === "ADMIN";
+  const isManager = user?.role === "MANAGER" || user?.role === "ADMIN";
 
-  const [tasks, setTasks] = useState(mockTasks);
+  const [tasks, setTasks] = useState([]);
+  const [knownTeams, setKnownTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+
   const [teamFilter, setTeamFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [search, setSearch] = useState("");
 
-  const teams = useMemo(() => {
-    return ["all", ...new Set(tasks.map((task) => task.teamName).filter(Boolean))];
-  }, [tasks]);
+  // TASK-03 / TASK-04 / TASK-05 — the backend enforces team isolation.
+  // Managers may pass ?teamId=; for employees it is ignored server-side.
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await listTasks(isManager ? teamFilter : undefined);
+      setTasks(data);
+      setKnownTeams((prev) =>
+        Array.from(
+          new Set([...prev, ...data.map((t) => t.teamId).filter(Boolean)])
+        )
+      );
+    } catch (err) {
+      setError(
+        err.response?.data?.message || err.message || "Failed to load tasks."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [isManager, teamFilter]);
 
-  const teamOptions = useMemo(() => {
-    return teams.map((team) => ({
-      value: team,
-      label: team === "all" ? "All teams" : team,
-    }));
-  }, [teams]);
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  const teamOptions = useMemo(
+    () => [
+      { value: "all", label: "All teams" },
+      ...knownTeams.map((t) => ({ value: t, label: t })),
+    ],
+    [knownTeams]
+  );
 
   const priorityOptions = [
     { value: "all", label: "All priorities" },
-    { value: "Low", label: "Low" },
-    { value: "Medium", label: "Medium" },
-    { value: "High", label: "High" },
-    { value: "Critical", label: "Critical" },
+    { value: "LOW", label: "Low" },
+    { value: "MEDIUM", label: "Medium" },
+    { value: "HIGH", label: "High" },
+    { value: "CRITICAL", label: "Critical" },
   ];
 
-  const statusOptions = columns.map((status) => ({
-    value: status,
-    label: status,
-  }));
-
+  // Priority + search are applied client-side; team filtering is server-side.
   const filteredTasks = tasks.filter((task) => {
-    const matchesTeam = teamFilter === "all" || task.teamName === teamFilter;
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
+    const matchesPriority =
+      priorityFilter === "all" || task.priority === priorityFilter;
+    const term = search.trim().toLowerCase();
     const matchesSearch =
-      task.title?.toLowerCase().includes(search.toLowerCase()) ||
-      task.description?.toLowerCase().includes(search.toLowerCase());
-
-    return matchesTeam && matchesPriority && matchesSearch;
+      !term ||
+      task.title?.toLowerCase().includes(term) ||
+      task.description?.toLowerCase().includes(term);
+    return matchesPriority && matchesSearch;
   });
 
-  function moveTask(taskId, nextStatus) {
+  const selectedTask =
+    tasks.find((t) => t.taskId === selectedTaskId) || null;
+
+  async function handleStatusChange(task, nextStatus) {
+    if (nextStatus === task.status) return;
+
+    const previous = tasks;
+    // Optimistic update.
     setTasks((prev) =>
-      prev.map((task) =>
-        task.taskId === taskId
-          ? { ...task, status: nextStatus, updatedAt: new Date().toISOString() }
-          : task
+      prev.map((t) =>
+        t.taskId === task.taskId ? { ...t, status: nextStatus } : t
       )
     );
+
+    try {
+      const updated = await updateTaskStatus(task.taskId, nextStatus);
+      setTasks((prev) =>
+        prev.map((t) => (t.taskId === updated.taskId ? updated : t))
+      );
+    } catch (err) {
+      setTasks(previous); // roll back
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to update task status."
+      );
+    }
   }
 
   function handleTaskCreated(task) {
-    setTasks((prev) => [
-      {
-        ...task,
-        status: STATUS_TO_COLUMN[task.status] ?? task.status,
-        priority: PRIORITY_LABEL[task.priority] ?? task.priority,
-        teamName: task.teamId,
-        assigneeName: task.assigneeId,
-        deadline: task.deadline?.slice(0, 10),
-      },
-      ...prev,
-    ]);
+    setTasks((prev) => [task, ...prev]);
+  }
+
+  function handleTaskUpdated(updated) {
+    setTasks((prev) =>
+      prev.map((t) => (t.taskId === updated.taskId ? updated : t))
+    );
+  }
+
+  function handleTaskDeleted(taskId) {
+    setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+    setSelectedTaskId(null);
   }
 
   return (
@@ -212,7 +286,7 @@ export default function Board() {
           </p>
         </div>
 
-        {canCreateTask && (
+        {isManager && (
           <button
             onClick={() => setCreateOpen(true)}
             className="rounded-2xl bg-[#22b8b0] px-5 py-3 text-sm font-semibold text-white hover:bg-[#159c96]"
@@ -228,7 +302,20 @@ export default function Board() {
         onCreated={handleTaskCreated}
       />
 
-      <div className="mb-6 grid gap-3 rounded-3xl bg-white p-4 shadow-sm shadow-slate-200 md:grid-cols-3">
+      <TaskDetailModal
+        open={Boolean(selectedTaskId)}
+        task={selectedTask}
+        canManage={isManager}
+        onClose={() => setSelectedTaskId(null)}
+        onUpdated={handleTaskUpdated}
+        onDeleted={handleTaskDeleted}
+      />
+
+      <div
+        className={`mb-6 grid gap-3 rounded-3xl bg-white p-4 shadow-sm shadow-slate-200 ${
+          isManager ? "md:grid-cols-3" : "md:grid-cols-2"
+        }`}
+      >
         <input
           className="rounded-2xl border border-[#ccebed] bg-[#f7fbfc] px-4 py-3 text-sm outline-none transition focus:border-[#22b8b0] focus:ring-4 focus:ring-[#dff7f5]"
           value={search}
@@ -236,89 +323,133 @@ export default function Board() {
           placeholder="Search tasks..."
         />
 
-        <Select
-          options={teamOptions}
-          value={teamOptions.find((option) => option.value === teamFilter)}
-          onChange={(option) => setTeamFilter(option?.value || "all")}
-          styles={selectStyles}
-          isSearchable={false}
-        />
+        {isManager && (
+          <Select
+            options={teamOptions}
+            value={teamOptions.find((option) => option.value === teamFilter)}
+            onChange={(option) => setTeamFilter(option?.value || "all")}
+            styles={selectStyles}
+            isSearchable={false}
+          />
+        )}
 
         <Select
           options={priorityOptions}
-          value={priorityOptions.find((option) => option.value === priorityFilter)}
+          value={priorityOptions.find(
+            (option) => option.value === priorityFilter
+          )}
           onChange={(option) => setPriorityFilter(option?.value || "all")}
           styles={selectStyles}
           isSearchable={false}
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-4">
-        {columns.map((column) => {
-          const columnTasks = filteredTasks.filter((task) => task.status === column);
+      {error && (
+        <div className="mb-6 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-          return (
-            <div
-              key={column}
-              className="min-h-[600px] rounded-3xl bg-white p-4 shadow-sm shadow-slate-200"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-bold text-slate-900">{column}</h3>
-                <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
-                  {columnTasks.length}
-                </span>
-              </div>
+      {loading ? (
+        <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
+          Loading tasks...
+        </div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-4">
+          {COLUMNS.map((column) => {
+            const columnTasks = filteredTasks.filter(
+              (task) => task.status === column.key
+            );
 
-              <div className="space-y-3">
-                {columnTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
-                    No tasks here
-                  </div>
-                ) : (
-                  columnTasks.map((task) => (
-                    <div key={task.taskId} className="rounded-3xl bg-[#f7fbfc] p-4">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <h4 className="font-bold text-slate-950">{task.title}</h4>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
-                            task.priority
-                          )}`}
-                        >
-                          {task.priority}
-                        </span>
-                      </div>
+            return (
+              <div
+                key={column.key}
+                className="min-h-[600px] rounded-3xl bg-white p-4 shadow-sm shadow-slate-200"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900">{column.label}</h3>
+                  <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
+                    {columnTasks.length}
+                  </span>
+                </div>
 
-                      <p className="line-clamp-2 text-sm text-slate-500">
-                        {task.description}
-                      </p>
-
-                      <div className="mt-4 space-y-1 text-xs text-slate-400">
-                        <p>Team: {task.teamName}</p>
-                        <p>Assignee: {task.assigneeName}</p>
-                        <p>Deadline: {task.deadline}</p>
-                      </div>
-
-                      <div className="mt-4">
-                        <Select
-                          options={statusOptions}
-                          value={statusOptions.find(
-                            (option) => option.value === task.status
-                          )}
-                          onChange={(option) =>
-                            moveTask(task.taskId, option?.value || task.status)
-                          }
-                          styles={smallSelectStyles}
-                          isSearchable={false}
-                        />
-                      </div>
+                <div className="space-y-3">
+                  {columnTasks.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
+                      No tasks here
                     </div>
-                  ))
-                )}
+                  ) : (
+                    columnTasks.map((task) => {
+                      const priorityLabel =
+                        PRIORITY_LABEL[task.priority] ?? task.priority;
+                      const deadline = deadlineMeta(task);
+
+                      return (
+                        <div
+                          key={task.taskId}
+                          onClick={() => setSelectedTaskId(task.taskId)}
+                          className="cursor-pointer rounded-3xl bg-[#f7fbfc] p-4 transition hover:ring-2 hover:ring-[#dff7f5]"
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <h4 className="font-bold text-slate-950">
+                              {task.title}
+                            </h4>
+                            <span
+                              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
+                                priorityLabel
+                              )}`}
+                            >
+                              {priorityLabel}
+                            </span>
+                          </div>
+
+                          <p className="line-clamp-2 text-sm text-slate-500">
+                            {task.description}
+                          </p>
+
+                          <div className="mt-4 space-y-1 text-xs text-slate-400">
+                            <p>Team: {task.teamId}</p>
+                            <p>Assignee: {task.assigneeId}</p>
+                            <p className={deadline.className}>
+                              Deadline: {deadline.label}
+                            </p>
+                          </div>
+
+                          {/* Status dropdown — clicks here must not open the modal. */}
+                          <div
+                            className="mt-4"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Select
+                              options={STATUS_OPTIONS}
+                              value={STATUS_OPTIONS.find(
+                                (option) => option.value === task.status
+                              )}
+                              onChange={(option) =>
+                                handleStatusChange(
+                                  task,
+                                  option?.value || task.status
+                                )
+                              }
+                              styles={smallSelectStyles}
+                              isSearchable={false}
+                              isDisabled={
+                                !isManager &&
+                                (task.assigneeId || "").toLowerCase() !==
+                                  (user?.email || "").toLowerCase()
+                              }
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -66,7 +66,7 @@ export default function Login() {
             let backendUser = null;
 
       try {
-        const meResponse = await api.get("/me");
+        const meResponse = await api.get("/api/me");
         backendUser = meResponse.data.user || meResponse.data;
       } catch (backendError) {
         if (backendError.response?.status === 404) {

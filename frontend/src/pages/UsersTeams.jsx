@@ -110,8 +110,8 @@ export default function UsersTeams() {
     setLoading(true);
 
     const [usersResponse, teamsResponse] = await Promise.all([
-      api.get("/users"),
-      api.get("/teams"),
+      api.get("/api/users"),
+      api.get("/api/teams"),
     ]);
 
     const usersData = usersResponse.data.users || usersResponse.data;
@@ -144,7 +144,7 @@ export default function UsersTeams() {
     setSuccess("");
     setCreating(true);
 
-    await api.post("/teams", {
+    await api.post("/api/teams", {
       name: teamName,
     });
 
@@ -196,7 +196,7 @@ async function handleAssignUserToTeam(e) {
     setSuccess("");
     setAssigning(true);
 
-    await api.put(`/users/${encodeURIComponent(selectedUser)}/team`, {
+    await api.put(`/api/users/${encodeURIComponent(selectedUser)}/team`, {
       teamId: team.teamId,
       teamName: team.name,
     });
