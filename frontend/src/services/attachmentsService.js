@@ -13,13 +13,17 @@ export async function getAttachmentUploadUrl(taskId, file) {
 }
 
 export async function uploadAttachmentToS3(uploadUrl, file) {
-  await fetch(uploadUrl, {
+  const response = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
       "Content-Type": file.type,
     },
     body: file,
   });
+
+  if (!response.ok) {
+    throw new Error("Attachment upload to S3 failed.");
+  }
 }
 
 export async function saveTaskAttachment(taskId, file, key) {
