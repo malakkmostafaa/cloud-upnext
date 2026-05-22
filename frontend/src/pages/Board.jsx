@@ -1,27 +1,20 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-} from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { X, CheckCircle2, AlertCircle } from "lucide-react";
+
 import { useAuth } from "../context/AuthContext";
-import {
-  listTasks,
-  updateTaskStatus
-} from "../services/tasksService";import TaskCreateModal from "../components/tasks/TaskCreateModal";
+import { listTasks, updateTaskStatus } from "../services/tasksService";
+import TaskCreateModal from "../components/tasks/TaskCreateModal";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
-// Kanban columns keyed by the backend status enum.
 const COLUMNS = [
   { key: "TO_DO", label: "To Do" },
   { key: "IN_PROGRESS", label: "In Progress" },
   { key: "IN_REVIEW", label: "In Review" },
   { key: "DONE", label: "Done" },
 ];
-
-const STATUS_OPTIONS = COLUMNS.map((c) => ({ value: c.key, label: c.label }));
 
 const PRIORITY_LABEL = {
   LOW: "Low",
@@ -98,69 +91,39 @@ const selectStyles = {
   }),
 };
 
-const smallSelectStyles = {
-  ...selectStyles,
-
-  control: (base, state) => ({
-    ...base,
-    minHeight: "42px",
-    borderRadius: "16px",
-    borderColor: state.isFocused ? "#22b8b0" : "#ccebed",
-    backgroundColor: "white",
-    boxShadow: state.isFocused ? "0 0 0 4px #dff7f5" : "none",
-    cursor: "pointer",
-    "&:hover": {
-      borderColor: "#22b8b0",
-    },
-  }),
-
-  option: (base, state) => ({
-    ...base,
-    borderRadius: "12px",
-    backgroundColor: state.isSelected
-      ? "#22b8b0"
-      : state.isFocused
-        ? "#dff7f5"
-        : "white",
-    color: state.isSelected ? "white" : "#0f172a",
-    padding: "10px 12px",
-    cursor: "pointer",
-    fontSize: "13px",
-  }),
-
-  singleValue: (base) => ({
-    ...base,
-    color: "#0f172a",
-    fontSize: "13px",
-    fontWeight: 500,
-  }),
-};
-
 function priorityClass(priorityLabel) {
   if (priorityLabel === "Critical") return "bg-red-50 text-red-600";
   if (priorityLabel === "High") return "bg-orange-50 text-orange-600";
-  if (priorityLabel === "Medium") return "bg-yellow-50 text-yellow-700";
+  if (priorityLabel === "Medium") return "bg-amber-50 text-amber-700";
   return "bg-[#dff7f5] text-[#159c96]";
 }
+
 function teamClass(teamId) {
   const team = (teamId || "").toLowerCase();
 
   if (team === "frontend") {
-    return "bg-blue-50 text-blue-700";
+    return "bg-[#e0f7f4] text-[#137b76] ring-[#b7ebe6]";
   }
 
   if (team === "backend") {
-    return "bg-purple-50 text-purple-700";
+    return "bg-[#edf7ef] text-[#3f7a4d] ring-[#cdebd4]";
   }
 
   if (team === "security") {
-    return "bg-red-50 text-red-700";
+    return "bg-[#fff3e6] text-[#a65f00] ring-[#ffe0b8]";
   }
 
-  return "bg-green-50 text-green-700";
+  if (team === "devops") {
+    return "bg-[#eef4ff] text-[#4361a8] ring-[#d7e4ff]";
+  }
+
+  if (team === "qa") {
+    return "bg-[#f4f1ff] text-[#6b55a3] ring-[#e1d9ff]";
+  }
+
+  return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
-// TASK-11: surface the deadline and flag overdue / due-soon tasks.
 function deadlineMeta(task) {
   if (!task.deadline) {
     return { label: "No deadline", className: "text-slate-400" };
@@ -175,15 +138,33 @@ function deadlineMeta(task) {
   const due = new Date(task.deadline);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
   const diffDays = Math.ceil((due - today) / 86400000);
 
   if (diffDays < 0) {
-    return { label: `${label} · Overdue`, className: "text-red-600 font-semibold" };
+    return {
+      label: `${label} · Overdue`,
+      className: "text-red-600 font-semibold",
+    };
   }
+
   if (diffDays <= 2) {
-    return { label: `${label} · Due soon`, className: "text-orange-600 font-semibold" };
+    return {
+      label: `${label} · Due soon`,
+      className: "text-orange-600 font-semibold",
+    };
   }
+
   return { label, className: "text-slate-400" };
+}
+
+function getToastMessage(error, fallback) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback ||
+    "Something went wrong."
+  );
 }
 
 export default function Board() {
@@ -193,7 +174,8 @@ export default function Board() {
   const [tasks, setTasks] = useState([]);
   const [knownTeams, setKnownTeams] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  const [toast, setToast] = useState(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -202,11 +184,18 @@ export default function Board() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [search, setSearch] = useState("");
 
-  // TASK-03 / TASK-04 / TASK-05 — the backend enforces team isolation.
-  // Managers may pass ?teamId=; for employees it is ignored server-side.
+  function showToast(type, message) {
+    setToast({ type, message });
+
+    window.clearTimeout(showToast.timeoutId);
+    showToast.timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  }
+
   const loadTasks = useCallback(async () => {
     setLoading(true);
-    setError("");
+
     try {
       const data = await listTasks(isManager ? teamFilter : undefined);
       const normalizedTasks = Array.isArray(data) ? data : [];
@@ -222,9 +211,7 @@ export default function Board() {
         )
       );
     } catch (err) {
-      setError(
-        err.response?.data?.message || err.message || "Failed to load tasks."
-      );
+      showToast("error", getToastMessage(err, "Failed to load tasks."));
     } finally {
       setLoading(false);
     }
@@ -237,7 +224,7 @@ export default function Board() {
   const teamOptions = useMemo(
     () => [
       { value: "all", label: "All teams" },
-      ...knownTeams.map((t) => ({ value: t, label: t })),
+      ...knownTeams.map((team) => ({ value: team, label: team })),
     ],
     [knownTeams]
   );
@@ -250,106 +237,100 @@ export default function Board() {
     { value: "CRITICAL", label: "Critical" },
   ];
 
-  // Priority + search are applied client-side; team filtering is server-side.
   const filteredTasks = tasks.filter((task) => {
     const matchesPriority =
       priorityFilter === "all" || task.priority === priorityFilter;
+
     const term = search.trim().toLowerCase();
+
     const matchesSearch =
       !term ||
       task.title?.toLowerCase().includes(term) ||
-      task.description?.toLowerCase().includes(term);
+      task.description?.toLowerCase().includes(term) ||
+      task.teamId?.toLowerCase().includes(term) ||
+      task.assigneeId?.toLowerCase().includes(term);
+
     return matchesPriority && matchesSearch;
   });
 
-  const selectedTask =
-    tasks.find((t) => t.taskId === selectedTaskId) || null;
-
-  async function handleStatusChange(task, nextStatus) {
-    if (nextStatus === task.status) return;
-
-    const previous = tasks;
-    // Optimistic update.
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.taskId === task.taskId ? { ...t, status: nextStatus } : t
-      )
-    );
-
-    try {
-      const updated = await updateTaskStatus(task.taskId, nextStatus);
-      setTasks((prev) =>
-        prev.map((t) => (t.taskId === updated.taskId ? updated : t))
-      );
-    } catch (err) {
-      setTasks(previous); // roll back
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to update task status."
-      );
-    }
-  }
+  const selectedTask = tasks.find((task) => task.taskId === selectedTaskId) || null;
 
   function handleTaskCreated(task) {
     setTasks((prev) => [task, ...prev]);
+    showToast("success", "Task created successfully.");
   }
 
   function handleTaskUpdated(updated) {
     setTasks((prev) =>
-      prev.map((t) => (t.taskId === updated.taskId ? updated : t))
+      prev.map((task) => (task.taskId === updated.taskId ? updated : task))
     );
   }
 
   function handleTaskDeleted(taskId) {
-    setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+    setTasks((prev) => prev.filter((task) => task.taskId !== taskId));
     setSelectedTaskId(null);
-  }
-  const handleDragEnd = async (result) => {
-  if (!result.destination) return;
-
-  const { draggableId, destination, source } = result;
-
-  if (destination.droppableId === source.droppableId) return;
-
-  const task = tasks.find((t) => t.taskId === draggableId);
-
-  if (!task) return;
-
-  const isOwnTask =
-    (task.assigneeId || "").toLowerCase() ===
-    (user?.email || "").toLowerCase();
-
-  if (!isManager && !isOwnTask) {
-    alert("You can only move your own tasks");
-    return;
+    showToast("success", "Task deleted successfully.");
   }
 
-  try {
-    await updateTaskStatus(draggableId, destination.droppableId);
+  async function handleDragEnd(result) {
+    if (!result.destination) return;
+
+    const { draggableId, destination, source } = result;
+
+    if (destination.droppableId === source.droppableId) return;
+
+    const task = tasks.find((item) => item.taskId === draggableId);
+
+    if (!task) return;
+
+    const isOwnTask =
+      (task.assigneeId || "").toLowerCase() === (user?.email || "").toLowerCase();
+
+    if (!isManager && !isOwnTask) {
+      showToast("error", "You can only move tasks assigned to you.");
+      return;
+    }
+
+    const previousTasks = tasks;
 
     setTasks((prev) =>
-      prev.map((t) =>
-        t.taskId === draggableId
-          ? { ...t, status: destination.droppableId }
-          : t
+      prev.map((item) =>
+        item.taskId === draggableId
+          ? { ...item, status: destination.droppableId }
+          : item
       )
     );
-  } catch (error) {
-    console.error(error);
-    alert("Failed to update task status");
+
+    try {
+      const updated = await updateTaskStatus(draggableId, destination.droppableId);
+
+      setTasks((prev) =>
+        prev.map((item) => (item.taskId === updated.taskId ? updated : item))
+      );
+
+      showToast("success", "Task status updated.");
+    } catch (err) {
+      setTasks(previousTasks);
+      showToast("error", getToastMessage(err, "Failed to update task status."));
+    }
   }
-};
-  
 
   return (
-    <div>
+    <div className="relative">
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       <div className="mb-8 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-[#159c96]">Kanban</p>
           <h2 className="mt-2 text-3xl font-bold text-slate-950">Task Board</h2>
           <p className="mt-2 text-slate-500">
-            Track work across To Do, In Progress, In Review, and Done.
+            Drag tasks across columns to update their progress.
           </p>
         </div>
 
@@ -387,7 +368,7 @@ export default function Board() {
           className="rounded-2xl border border-[#ccebed] bg-[#f7fbfc] px-4 py-3 text-sm outline-none transition focus:border-[#22b8b0] focus:ring-4 focus:ring-[#dff7f5]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search tasks..."
+          placeholder="Search tasks, teams, or assignees..."
         />
 
         {isManager && (
@@ -402,168 +383,188 @@ export default function Board() {
 
         <Select
           options={priorityOptions}
-          value={priorityOptions.find(
-            (option) => option.value === priorityFilter
-          )}
+          value={priorityOptions.find((option) => option.value === priorityFilter)}
           onChange={(option) => setPriorityFilter(option?.value || "all")}
           styles={selectStyles}
           isSearchable={false}
         />
       </div>
-      <div></div>
 
-      {error && (
-        <div className="mb-6 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+      {loading ? (
+        <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
+          Loading tasks...
         </div>
-      )}
-      
-     
+      ) : (
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="grid gap-5 lg:grid-cols-4">
+            {COLUMNS.map((column) => {
+              const columnTasks = filteredTasks.filter(
+                (task) => task.status === column.key
+              );
 
-    {loading ? (
-  <div className="rounded-3xl bg-white p-6 text-slate-500 shadow-sm shadow-slate-200">
-    Loading tasks...
-  </div>
-) : (
-  <DragDropContext onDragEnd={handleDragEnd}>
-    <div className="grid gap-5 lg:grid-cols-4">
-      {COLUMNS.map((column) => {
-        const columnTasks = filteredTasks.filter(
-          (task) => task.status === column.key
-        );
+              return (
+                <Droppable droppableId={column.key} key={column.key}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`min-h-[600px] rounded-3xl p-4 shadow-sm shadow-slate-200 transition ${
+                        snapshot.isDraggingOver
+                          ? "bg-[#eefaf9] ring-2 ring-[#22b8b0]/30"
+                          : "bg-white"
+                      }`}
+                    >
+                      <div className="mb-4 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900">
+                          {column.label}
+                        </h3>
 
-        return (
-          <Droppable droppableId={column.key} key={column.key}>
-            {(provided) => (
-              <div
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-                className="min-h-[600px] rounded-3xl bg-white p-4 shadow-sm shadow-slate-200"
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900">
-                    {column.label}
-                  </h3>
+                        <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
+                          {columnTasks.length}
+                        </span>
+                      </div>
 
-                  <span className="rounded-full bg-[#dff7f5] px-3 py-1 text-xs font-semibold text-[#159c96]">
-                    {columnTasks.length}
-                  </span>
-                </div>
+                      <div className="space-y-3">
+                        {columnTasks.length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
+                            Drop tasks here
+                          </div>
+                        ) : (
+                          columnTasks.map((task, index) => {
+                            const priorityLabel =
+                              PRIORITY_LABEL[task.priority] ?? task.priority;
 
-                <div className="space-y-3">
-                  {columnTasks.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
-                      No tasks here
-                    </div>
-                  ) : (
-                    columnTasks.map((task, index) => {
-                      const priorityLabel =
-                        PRIORITY_LABEL[task.priority] ?? task.priority;
+                            const deadline = deadlineMeta(task);
 
-                      const deadline = deadlineMeta(task);
+                            const isOwnTask =
+                              (task.assigneeId || "").toLowerCase() ===
+                              (user?.email || "").toLowerCase();
 
-                      return (
-                        <Draggable
-                          draggableId={task.taskId}
-                          index={index}
-                          key={task.taskId}
-                        >
-                          {(provided) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              onClick={() =>
-                                setSelectedTaskId(task.taskId)
-                              }
-                              className="cursor-pointer rounded-3xl bg-[#f7fbfc] p-4 transition hover:ring-2 hover:ring-[#dff7f5]"
-                            >
-                              <div className="mb-3 flex items-start justify-between gap-3">
-                                <h4 className="font-bold text-slate-950">
-                                  {task.title}
-                                </h4>
+                            const canDrag = isManager || isOwnTask;
 
-                                <div className="flex flex-col items-end gap-1">
-  <span
-    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
-      priorityLabel
-    )}`}
-  >
-    {priorityLabel}
-  </span>
-
-  <span
-    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold text-white ${
-      task.teamId === "backend"
-        ? "bg-blue-500"
-        : task.teamId === "frontend"
-        ? "bg-pink-500"
-        : task.teamId === "security"
-        ? "bg-green-600"
-        : "bg-slate-500"
-    }`}
-  >
-    {task.teamId}
-  </span>
-</div>
-                              </div>
-
-                              <p className="line-clamp-2 text-sm text-slate-500">
-                                {task.description}
-                              </p>
-
-                              <div className="mt-4 space-y-1 text-xs text-slate-400">
-                                <p>Team: {task.teamId}</p>
-
-                                <p>Assignee: {task.assigneeId}</p>
-
-                                <p className={deadline.className}>
-                                  Deadline: {deadline.label}
-                                </p>
-                              </div>
-
-                              <div
-                                className="mt-4"
-                                onClick={(e) => e.stopPropagation()}
+                            return (
+                              <Draggable
+                                draggableId={task.taskId}
+                                index={index}
+                                key={task.taskId}
+                                isDragDisabled={!canDrag}
                               >
-                                <Select
-                                  options={STATUS_OPTIONS}
-                                  value={STATUS_OPTIONS.find(
-                                    (option) =>
-                                      option.value === task.status
-                                  )}
-                                  onChange={(option) =>
-                                    handleStatusChange(
-                                      task,
-                                      option?.value || task.status
-                                    )
-                                  }
-                                  styles={smallSelectStyles}
-                                  isSearchable={false}
-                                  isDisabled={
-                                    !isManager &&
-                                    (task.assigneeId || "").toLowerCase() !==
-                                      (user?.email || "").toLowerCase()
-                                  }
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })
-                  )}
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    onClick={() => setSelectedTaskId(task.taskId)}
+                                    className={`cursor-pointer rounded-3xl border border-transparent bg-[#f7fbfc] p-4 transition ${
+                                      snapshot.isDragging
+                                        ? "rotate-[1deg] shadow-xl ring-2 ring-[#22b8b0]/30"
+                                        : "hover:border-[#dff7f5] hover:bg-white hover:shadow-sm"
+                                    } ${!canDrag ? "cursor-not-allowed opacity-80" : ""}`}
+                                  >
+                                    <div className="mb-3 flex items-start justify-between gap-3">
+                                      <h4 className="line-clamp-2 font-bold text-slate-950">
+                                        {task.title}
+                                      </h4>
 
-                  {provided.placeholder}
-                </div>
-              </div>
-            )}
-          </Droppable>
-        );
-      })}
+                                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                                        <span
+                                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
+                                            priorityLabel
+                                          )}`}
+                                        >
+                                          {priorityLabel}
+                                        </span>
+
+                                        <span
+                                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${teamClass(
+                                            task.teamId
+                                          )}`}
+                                        >
+                                          {task.teamId || "No team"}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <p className="line-clamp-2 text-sm text-slate-500">
+                                      {task.description || "No description provided."}
+                                    </p>
+
+                                    <div className="mt-4 space-y-1 text-xs text-slate-400">
+                                      <p>
+                                        <span className="font-semibold text-slate-500">
+                                          Assignee:
+                                        </span>{" "}
+                                        {task.assigneeId || "Unassigned"}
+                                      </p>
+
+                                      <p className={deadline.className}>
+                                        <span className="font-semibold">
+                                          Deadline:
+                                        </span>{" "}
+                                        {deadline.label}
+                                      </p>
+                                    </div>
+
+                                    <p className="mt-4 text-[11px] font-medium text-slate-400">
+                                      {canDrag
+                                        ? "Drag to update progress"
+                                        : "Only the assignee can move this task"}
+                                    </p>
+                                  </div>
+                                )}
+                              </Draggable>
+                            );
+                          })
+                        )}
+
+                        {provided.placeholder}
+                      </div>
+                    </div>
+                  )}
+                </Droppable>
+              );
+            })}
+          </div>
+        </DragDropContext>
+      )}
     </div>
-  </DragDropContext>
-)}
-</div>
-);
+  );
+}
+
+function Toast({ type, message, onClose }) {
+  const isError = type === "error";
+
+  return (
+    <div className="fixed right-6 top-6 z-[80] w-[min(420px,calc(100vw-2rem))]">
+      <div
+        className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl backdrop-blur ${
+          isError
+            ? "border-red-100 bg-red-50/95 text-red-700"
+            : "border-[#cdeeea] bg-[#effaf9]/95 text-[#137b76]"
+        }`}
+      >
+        {isError ? (
+          <AlertCircle className="mt-0.5 shrink-0" size={18} />
+        ) : (
+          <CheckCircle2 className="mt-0.5 shrink-0" size={18} />
+        )}
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold">
+            {isError ? "Action failed" : "Success"}
+          </p>
+          <p className="mt-0.5 text-sm">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg p-1 opacity-70 hover:bg-white/70 hover:opacity-100"
+          aria-label="Dismiss notification"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
 }

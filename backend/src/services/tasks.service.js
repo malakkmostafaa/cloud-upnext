@@ -250,7 +250,7 @@ if (
 ) {
   await docClient.send(
     new PutCommand({
-      TableName: Tables.AUDIT_LOGS,
+      TableName: Tables.AUDIT_LOG,
       Item: {
         logId: randomUUID(),
         taskId,
