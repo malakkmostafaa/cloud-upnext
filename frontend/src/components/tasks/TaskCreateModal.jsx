@@ -1,8 +1,9 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import api from "../../api/api";
-import { createTask } from "../../services/tasksService";
+import { createTask, uploadTaskImage } from "../../services/tasksService";
 import { listProjects } from "../../services/projectsService";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -26,6 +27,8 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
 
   // Only employees can be assignees (the task's team follows the assignee).
   const assignees = users.filter((u) => u.role === "EMPLOYEE");
@@ -36,6 +39,8 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
     setForm(initialForm);
     setError("");
     setFieldErrors([]);
+    setSelectedImage(null);
+    setImagePreviewUrl("");
 
     let cancelled = false;
     setLoadingData(true);
@@ -93,37 +98,80 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
     (p) => p.teamId === form.teamId || p.teamId === "all"
   );
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setFieldErrors([]);
+  function handleImageChange(e) {
+  const file = e.target.files?.[0];
 
-    if (!form.teamId) {
-      setError("The selected employee has no team assigned. Assign them to a team first.");
-      return;
-    }
+  setError("");
+  setFieldErrors([]);
 
-    setSubmitting(true);
-    try {
-      const task = await createTask({
-        title: form.title,
-        description: form.description || undefined,
-        priority: form.priority,
-        deadline: new Date(form.deadline).toISOString(),
-        assigneeId: form.assigneeId,
-        teamId: form.teamId,
-        projectId: form.projectId,
-      });
-      onCreated?.(task);
-      onClose();
-    } catch (err) {
-      const data = err.response?.data;
-      setError(data?.message || err.message || "Failed to create task.");
-      if (Array.isArray(data?.details)) setFieldErrors(data.details);
-    } finally {
-      setSubmitting(false);
-    }
+  if (!file) {
+    setSelectedImage(null);
+    setImagePreviewUrl("");
+    return;
   }
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+
+  if (!allowedTypes.includes(file.type)) {
+    setSelectedImage(null);
+    setImagePreviewUrl("");
+    setError("Only JPEG, PNG, and WEBP images are allowed.");
+    return;
+  }
+
+  const maxSizeInMb = 5;
+  const maxSizeInBytes = maxSizeInMb * 1024 * 1024;
+
+  if (file.size > maxSizeInBytes) {
+    setSelectedImage(null);
+    setImagePreviewUrl("");
+    setError(`Image must be smaller than ${maxSizeInMb}MB.`);
+    return;
+  }
+
+  setSelectedImage(file);
+  setImagePreviewUrl(URL.createObjectURL(file));
+}
+async function handleSubmit(e) {
+  e.preventDefault();
+  setError("");
+  setFieldErrors([]);
+
+  if (!form.teamId) {
+    setError("The selected employee has no team assigned. Assign them to a team first.");
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    const createdTask = await createTask({
+      title: form.title,
+      description: form.description || undefined,
+      priority: form.priority,
+      deadline: new Date(form.deadline).toISOString(),
+      assigneeId: form.assigneeId,
+      teamId: form.teamId,
+      projectId: form.projectId,
+    });
+
+    let finalTask = createdTask;
+
+    if (selectedImage) {
+      finalTask = await uploadTaskImage(createdTask.taskId, selectedImage);
+    }
+
+    onCreated?.(finalTask);
+    onClose();
+  } catch (err) {
+    const data = err.response?.data;
+
+    setError(data?.message || err.message || "Failed to create task.");
+    if (Array.isArray(data?.details)) setFieldErrors(data.details);
+  } finally {
+    setSubmitting(false);
+  }
+}
 
   return (
     <div
@@ -273,8 +321,55 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
             </select>
           </Field>
 
-          {/* TODO(s3-member): when the image-upload widget is ready, render it
-              here and store the resulting S3 object key in `form.imageKey`. */}
+          <Field label="Optional Task Image">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+            <input
+              className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-[#22b8b0] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#159c96]"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleImageChange}
+              disabled={submitting}
+            />
+
+            <p className="mt-2 text-xs text-slate-400">
+              Optional. Supported formats: PNG, JPEG, WEBP. Maximum size: 5MB.
+            </p>
+
+            {selectedImage && (
+              <div className="mt-4 rounded-2xl bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {selectedImage.name}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {(selectedImage.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedImage(null);
+                      setImagePreviewUrl("");
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                {imagePreviewUrl && (
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Selected task preview"
+                    className="mt-3 h-40 w-full rounded-xl object-cover"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </Field>
 
           <div className="flex justify-end gap-3 pt-2">
             <button
@@ -289,8 +384,11 @@ export default function TaskCreateModal({ open, onClose, onCreated }) {
               disabled={submitting || loadingData}
               className="rounded-xl bg-[#22b8b0] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#159c96] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Creating..." : "Create Task"}
-            </button>
+          {submitting
+            ? selectedImage
+              ? "Creating & uploading..."
+              : "Creating..."
+            : "Create Task"}            </button>
           </div>
         </form>
       </div>

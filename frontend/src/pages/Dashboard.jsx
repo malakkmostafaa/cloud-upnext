@@ -32,7 +32,7 @@ export default function Dashboard() {
       setError("");
       try {
         const data = await listTasks();
-        if (!cancelled) setTasks(Array.isArray(data) ? data : []);
+        if (!cancelled) setTasks(data);
       } catch (err) {
         if (!cancelled) {
           setError(

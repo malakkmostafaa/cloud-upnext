@@ -9,6 +9,7 @@ import projectsRoutes from "./routes/projects.routes.js";
 import tasksRoutes from "./routes/tasks.routes.js";
 import teamsRoutes from "./routes/teams.routes.js";
 import usersRoutes from "./routes/users.routes.js";
+import attachmentsRoutes from "./routes/attachments.routes.js";
 //import analyticsRoutes from "./routes/analytics.routes.js";
 //import authRoutes from "./routes/auth.routes.js";
 
@@ -49,6 +50,7 @@ app.use("/api", commentsRoutes);
 app.use("/api", imagesRoutes);
 app.use("/api", teamsRoutes);
 app.use("/api", usersRoutes);
+app.use("/api", attachmentsRoutes);
 //app.use("/api", analyticsRoutes);
 
 // 404 handler

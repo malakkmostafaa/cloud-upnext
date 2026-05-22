@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { useAuth } from "../context/AuthContext";
@@ -184,10 +185,16 @@ export default function Board() {
     setError("");
     try {
       const data = await listTasks(isManager ? teamFilter : undefined);
-      setTasks(data);
+      const normalizedTasks = Array.isArray(data) ? data : [];
+
+      setTasks(normalizedTasks);
+
       setKnownTeams((prev) =>
         Array.from(
-          new Set([...prev, ...data.map((t) => t.teamId).filter(Boolean)])
+          new Set([
+            ...prev,
+            ...normalizedTasks.map((t) => t.teamId).filter(Boolean),
+          ])
         )
       );
     } catch (err) {

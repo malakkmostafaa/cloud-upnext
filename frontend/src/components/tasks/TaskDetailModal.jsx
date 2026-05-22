@@ -1,7 +1,22 @@
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+/* eslint-disable no-undef */
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useEffect, useMemo, useState } from "react";
+import { X, Paperclip, MessageCircle, Image as ImageIcon, Upload } from "lucide-react";
 
-import { updateTask, deleteTask } from "../../services/tasksService";
+import {
+  updateTask,
+  deleteTask,
+  getTaskImageViewUrl,
+} from "../../services/tasksService";
+import {
+  listTaskComments,
+  createTaskComment,
+} from "../../services/commentsService";
+import {
+  uploadTaskAttachment,
+  getAttachmentViewUrl,
+  deleteTaskAttachment,
+} from "../../services/attachmentsService";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
@@ -25,17 +40,17 @@ function formatDateTime(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
-/**
- * View / edit / delete a single task in one modal (TASK-07, TASK-08, TASK-09).
- *
- * @param {object}   props
- * @param {boolean}  props.open
- * @param {object}   props.task        - raw task object from the API
- * @param {boolean}  props.canManage   - true for managers/admins
- * @param {Function} props.onClose
- * @param {Function} props.onUpdated   - (updatedTask) => void
- * @param {Function} props.onDeleted   - (taskId) => void
- */
+function formatFileSize(size) {
+  const value = Number(size) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isImageAttachment(attachment) {
+  return attachment?.type === "IMAGE" || attachment?.contentType?.startsWith("image/");
+}
+
 export default function TaskDetailModal({
   open,
   task,
@@ -46,10 +61,28 @@ export default function TaskDetailModal({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [taskImage, setTaskImage] = useState(null);
+  const [loadingImage, setLoadingImage] = useState(false);
+
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commenting, setCommenting] = useState(false);
+
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachmentOpeningId, setAttachmentOpeningId] = useState("");
+
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState([]);
+
+  const activeAttachments = useMemo(() => {
+    const list = Array.isArray(task?.attachments) ? task.attachments : [];
+    return list.filter((item) => !item.deletedAt);
+  }, [task]);
 
   useEffect(() => {
     if (!open || !task) return;
@@ -59,6 +92,7 @@ export default function TaskDetailModal({
     setDeleting(false);
     setError("");
     setFieldErrors([]);
+
     setForm({
       title: task.title ?? "",
       description: task.description ?? "",
@@ -68,6 +102,35 @@ export default function TaskDetailModal({
       assigneeId: task.assigneeId ?? "",
       teamId: task.teamId ?? "",
     });
+
+    async function loadTaskExtras() {
+      setLoadingImage(true);
+      setLoadingComments(true);
+
+      try {
+        const [imageResult, commentsResult] = await Promise.allSettled([
+          getTaskImageViewUrl(task.taskId),
+          listTaskComments(task.taskId),
+        ]);
+
+        if (imageResult.status === "fulfilled") {
+          setTaskImage(imageResult.value?.imageUrl ? imageResult.value : null);
+        } else {
+          setTaskImage(null);
+        }
+
+        if (commentsResult.status === "fulfilled") {
+          setComments(commentsResult.value);
+        } else {
+          setComments([]);
+        }
+      } finally {
+        setLoadingImage(false);
+        setLoadingComments(false);
+      }
+    }
+
+    loadTaskExtras();
   }, [open, task]);
 
   if (!open || !task) return null;
@@ -92,6 +155,7 @@ export default function TaskDetailModal({
         assigneeId: form.assigneeId,
         teamId: form.teamId,
       });
+
       onUpdated?.(updated);
       setEditing(false);
     } catch (err) {
@@ -116,6 +180,94 @@ export default function TaskDetailModal({
     }
   }
 
+  async function handleAddComment(e) {
+    e.preventDefault();
+
+    if (!commentText.trim()) return;
+
+    setCommenting(true);
+    setError("");
+
+    try {
+      const comment = await createTaskComment(task.taskId, commentText.trim());
+      setComments((prev) => [...prev, comment]);
+      setCommentText("");
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Failed to add comment.");
+    } finally {
+      setCommenting(false);
+    }
+  }
+
+  async function handleAttachmentUpload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    if (!file) return;
+
+    setAttachmentUploading(true);
+    setError("");
+
+    try {
+      const result = await uploadTaskAttachment(task.taskId, file);
+      const updatedTask = result.task || result;
+
+      onUpdated?.(updatedTask);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to upload attachment."
+      );
+    } finally {
+      setAttachmentUploading(false);
+    }
+  }
+
+  async function handleOpenAttachment(attachment) {
+    setAttachmentOpeningId(attachment.attachmentId);
+    setError("");
+
+    try {
+      const result = await getAttachmentViewUrl(
+        task.taskId,
+        attachment.attachmentId
+      );
+
+      if (result.url) {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to open attachment."
+      );
+    } finally {
+      setAttachmentOpeningId("");
+    }
+  }
+
+  async function handleDeleteAttachment(attachment) {
+    setError("");
+
+    try {
+      const result = await deleteTaskAttachment(
+        task.taskId,
+        attachment.attachmentId
+      );
+
+      const updatedTask = result.task || result;
+      onUpdated?.(updatedTask);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to delete attachment."
+      );
+    }
+  }
+
   const statusHistory = Array.isArray(task.statusHistory)
     ? task.statusHistory
     : [];
@@ -128,7 +280,7 @@ export default function TaskDetailModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -140,6 +292,7 @@ export default function TaskDetailModal({
               {task.title}
             </h3>
           </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -255,6 +408,7 @@ export default function TaskDetailModal({
               >
                 Cancel
               </button>
+
               <button
                 type="submit"
                 disabled={saving}
@@ -266,19 +420,17 @@ export default function TaskDetailModal({
           </form>
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-2">
-              <DetailRow label="Status" value={statusLabel(task.status)} />
-              <DetailRow label="Priority" value={task.priority} />
-              <DetailRow
-                label="Deadline"
-                value={task.deadline ? task.deadline.slice(0, 10) : "—"}
-              />
-              <DetailRow label="Team" value={task.teamId || "—"} />
-              <DetailRow label="Assignee" value={task.assigneeId || "—"} />
-              <DetailRow label="Project" value={task.projectId || "—"} />
-              <DetailRow label="Created by" value={task.createdBy || "—"} />
-              <DetailRow label="Created at" value={formatDateTime(task.createdAt)} />
-            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+            <InfoCard label="Status" value={statusLabel(task.status)} />
+            <InfoCard label="Priority" value={task.priority} />
+            <InfoCard
+              label="Deadline"
+              value={task.deadline ? task.deadline.slice(0, 10) : "No deadline"}
+            />
+            <InfoCard label="Team" value={task.teamName || task.teamId || "Not assigned"} />
+            <InfoCard label="Assignee" value={task.assigneeName || task.assigneeId || "Unassigned"} />
+            <InfoCard label="Created" value={formatDateTime(task.createdAt)} />
+          </div>
 
             <div className="mt-4">
               <p className="mb-1 text-sm font-medium text-slate-700">
@@ -288,6 +440,152 @@ export default function TaskDetailModal({
                 {task.description || "No description provided."}
               </p>
             </div>
+
+            <section className="mt-6 rounded-3xl border border-slate-100 bg-[#f7fbfc] p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <ImageIcon size={18} className="text-[#159c96]" />
+                <h4 className="font-bold text-slate-900">Task Image</h4>
+              </div>
+
+              {loadingImage ? (
+                <p className="text-sm text-slate-400">Loading image...</p>
+              ) : taskImage?.imageUrl ? (
+                <div>
+                  <img
+                    src={taskImage.imageUrl}
+                    alt="Task attachment"
+                    className="max-h-72 w-full rounded-2xl object-cover"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">
+                    Source: {taskImage.source}
+                    {taskImage.resizedExists === false ? " · resized version not ready yet" : ""}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  No task image was uploaded.
+                </p>
+              )}
+            </section>
+
+            <section className="mt-6 rounded-3xl border border-slate-100 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Paperclip size={18} className="text-[#159c96]" />
+                  <h4 className="font-bold text-slate-900">Attachments</h4>
+                </div>
+
+                <label className="cursor-pointer rounded-xl bg-[#22b8b0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#159c96]">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleAttachmentUpload}
+                    disabled={attachmentUploading}
+                    accept="image/png,image/jpeg,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,text/plain"
+                  />
+                  <span className="flex items-center gap-1">
+                    <Upload size={14} />
+                    {attachmentUploading ? "Uploading..." : "Upload"}
+                  </span>
+                </label>
+              </div>
+
+              {activeAttachments.length === 0 ? (
+                <p className="text-sm text-slate-400">No attachments yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {activeAttachments.map((attachment) => (
+                    <div
+                      key={attachment.attachmentId}
+                      className="flex items-center justify-between gap-3 rounded-2xl bg-[#f7fbfc] px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {isImageAttachment(attachment) ? "🖼️ " : "📎 "}
+                          {attachment.filename}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {isImageAttachment(attachment) ? "Image" : "File"} ·{" "}
+                          {formatFileSize(attachment.size)}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAttachment(attachment)}
+                          disabled={attachmentOpeningId === attachment.attachmentId}
+                          className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white disabled:opacity-60"
+                        >
+                          {attachmentOpeningId === attachment.attachmentId
+                            ? "Opening..."
+                            : "Open"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAttachment(attachment)}
+                          className="rounded-xl border border-red-100 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-6 rounded-3xl border border-slate-100 bg-white p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <MessageCircle size={18} className="text-[#159c96]" />
+                <h4 className="font-bold text-slate-900">Comments</h4>
+              </div>
+
+              {loadingComments ? (
+                <p className="text-sm text-slate-400">Loading comments...</p>
+              ) : comments.length === 0 ? (
+                <p className="text-sm text-slate-400">No comments yet.</p>
+              ) : (
+                <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
+                  {comments.map((comment) => (
+                    <div
+                      key={comment.commentId}
+                      className="rounded-2xl bg-[#f7fbfc] px-4 py-3"
+                    >
+                      <div className="mb-1 flex justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {comment.authorName || "Team member"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {comment.createdAt ? new Date(comment.createdAt).toLocaleDateString() : ""}
+                        </p>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm text-slate-600">
+                        {comment.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleAddComment} className="mt-4 flex gap-2">
+                <input
+                  className={inputClass}
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Write a comment..."
+                  maxLength={1000}
+                />
+                <button
+                  type="submit"
+                  disabled={commenting || !commentText.trim()}
+                  className="rounded-xl bg-[#22b8b0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#159c96] disabled:opacity-60"
+                >
+                  {commenting ? "Sending..." : "Send"}
+                </button>
+              </form>
+            </section>
 
             <div className="mt-4">
               <p className="mb-2 text-sm font-medium text-slate-700">
@@ -352,13 +650,15 @@ function Field({ label, required, children }) {
   );
 }
 
-function DetailRow({ label, value }) {
+function InfoCard({ label, value }) {
   return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+    <div className="rounded-2xl bg-[#f7fbfc] px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
-      <p className="mt-0.5 break-words text-sm text-slate-700">{value}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-slate-800">
+        {value || "—"}
+      </p>
     </div>
   );
 }
