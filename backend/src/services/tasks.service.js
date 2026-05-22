@@ -72,6 +72,8 @@ export async function createTask(input, createdBy) {
     imageResizedKey: input.imageResizedKey || "",
     imageVersions: [],
 
+    attachments: [],
+
     createdBy,
     createdAt: now,
     updatedAt: now,
@@ -147,19 +149,26 @@ async function queryTasksByTeam(teamId) {
  * @returns {Promise<object[]>}
  */
 export async function listTasks({ role, teamId, filterTeamId }) {
-  const isManager = role === Role.MANAGER || role === Role.ADMIN;
+  const normalizedRole = role?.toUpperCase();
+  const normalizedTeamId = teamId?.trim();
+  const normalizedFilterTeamId = filterTeamId?.trim();
+
+  const isManager =
+    normalizedRole === "MANAGER" || normalizedRole === "ADMIN";
 
   if (!isManager) {
-    if (!teamId) return [];
-    return queryTasksByTeam(teamId);
+    if (!normalizedTeamId) return [];
+    return queryTasksByTeam(normalizedTeamId);
   }
 
-  if (filterTeamId) {
-    return queryTasksByTeam(filterTeamId);
+  if (normalizedFilterTeamId && normalizedFilterTeamId !== "all") {
+    return queryTasksByTeam(normalizedFilterTeamId);
   }
 
   const result = await docClient.send(
-    new ScanCommand({ TableName: Tables.TASKS })
+    new ScanCommand({
+      TableName: Tables.TASKS,
+    })
   );
 
   return result.Items || [];
